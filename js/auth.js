@@ -3,9 +3,6 @@ const GoogleAuth = {
     // Replace with your actual OAuth client ID from Google Cloud Console
     CLIENT_ID: '655723817808-jkh1r6cms9vll7ehe4r9esvum85288ug.apps.googleusercontent.com',
     
-    // API key to use after authentication (optional for OAuth)
-    API_KEY: 'YOUR_API_KEY',
-    
     // Authorization scopes required
     SCOPES: 'https://www.googleapis.com/auth/youtube.readonly',
     
@@ -19,7 +16,6 @@ const GoogleAuth = {
     // DOM elements
     elements: {
         authorizeButton: null,
-        demoModeButton: null,
         signOutButton: null,
         authSection: null,
         inputSection: null,
@@ -34,7 +30,6 @@ const GoogleAuth = {
     init() {
         // Get DOM elements
         this.elements.authorizeButton = document.getElementById('authorize-button');
-        this.elements.demoModeButton = document.getElementById('demo-mode-button');
         this.elements.signOutButton = document.getElementById('sign-out-btn');
         this.elements.authSection = document.getElementById('auth-section');
         this.elements.inputSection = document.getElementById('input-section');
@@ -46,7 +41,6 @@ const GoogleAuth = {
         
         // Add event listeners
         this.elements.authorizeButton.addEventListener('click', () => this.handleAuthClick());
-        this.elements.demoModeButton.addEventListener('click', () => this.enableDemoMode());
         this.elements.signOutButton.addEventListener('click', () => this.handleSignOutClick());
         
         // Load the auth2 library and API client library
@@ -63,7 +57,6 @@ const GoogleAuth = {
     async initClient() {
         try {
             await gapi.client.init({
-                apiKey: this.API_KEY,
                 clientId: this.CLIENT_ID,
                 discoveryDocs: this.DISCOVERY_DOCS,
                 scope: this.SCOPES
@@ -195,8 +188,6 @@ const GoogleAuth = {
             gapi.auth2.getAuthInstance().signIn();
         } else {
             console.error('Auth client not initialized');
-            // Provide fallback for demo mode
-            this.enableDemoMode();
         }
     },
     
@@ -205,18 +196,6 @@ const GoogleAuth = {
         if (gapi.auth2) {
             gapi.auth2.getAuthInstance().signOut();
         }
-    },
-    
-    // Enable demo mode (no authentication)
-    enableDemoMode() {
-        this.isAuthenticated = false;
-        this.currentUser = null;
-        
-        // Hide auth section, show input section
-        this.elements.authSection.style.display = 'none';
-        this.elements.inputSection.style.display = 'block';
-        this.elements.userInfo.style.display = 'none';
-        this.elements.yourChannels.style.display = 'none';
     },
     
     // Get the authentication token

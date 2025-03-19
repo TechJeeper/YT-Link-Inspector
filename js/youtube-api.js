@@ -1,11 +1,10 @@
 // YouTube API utility functions
 const YouTubeAPI = {
-    apiKey: '', // Will be set from app.js
     accessToken: null, // Will be set from auth.js
     
-    // Initialize the API with your key
-    init(apiKey) {
-        this.apiKey = apiKey;
+    // Initialize the API (no longer needs apiKey)
+    init() {
+        // No init parameters needed for OAuth-only approach
     },
     
     // Set the access token for authenticated requests
@@ -37,14 +36,9 @@ const YouTubeAPI = {
         return { ...defaultOptions, ...options };
     },
     
-    // Create API URL with either key or token
+    // Create API URL with access token
     createApiUrl(baseUrl, params = {}) {
         const url = new URL(baseUrl);
-        
-        // Add common parameters
-        if (!this.accessToken && this.apiKey) {
-            params.key = this.apiKey;
-        }
         
         // Add all params to URL
         Object.keys(params).forEach(key => {
@@ -57,8 +51,8 @@ const YouTubeAPI = {
     // Get channel ID from username or custom URL
     async getChannelId(username) {
         try {
-            // If we have an access token and Google API is loaded, we can use it directly
-            if (this.accessToken && window.gapi?.client?.youtube) {
+            // If Google API is loaded, we can use it directly
+            if (window.gapi?.client?.youtube) {
                 try {
                     // First try by username
                     const response = await gapi.client.youtube.channels.list({
@@ -74,32 +68,37 @@ const YouTubeAPI = {
                     return this.searchChannelByCustomUrl(username);
                 } catch (error) {
                     console.error('Error using gapi for channel ID:', error);
-                    // Fall back to regular fetch
+                    // Fall back to regular fetch with access token
                 }
             }
             
-            const url = this.createApiUrl(
-                'https://www.googleapis.com/youtube/v3/channels',
-                {
-                    part: 'id',
-                    forUsername: username
+            // Only use this if gapi is not available but we have an access token
+            if (this.accessToken) {
+                const url = this.createApiUrl(
+                    'https://www.googleapis.com/youtube/v3/channels',
+                    {
+                        part: 'id',
+                        forUsername: username
+                    }
+                );
+                
+                const response = await fetch(url, this.getFetchOptions());
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch channel ID');
                 }
-            );
-            
-            const response = await fetch(url, this.getFetchOptions());
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch channel ID');
+                
+                const data = await response.json();
+                
+                if (data.items && data.items.length > 0) {
+                    return data.items[0].id;
+                }
+                
+                // If not found by username, try search
+                return this.searchChannelByCustomUrl(username);
+            } else {
+                throw new Error('Authentication required. Please sign in with Google.');
             }
-            
-            const data = await response.json();
-            
-            if (data.items && data.items.length > 0) {
-                return data.items[0].id;
-            }
-            
-            // If not found by username, try search
-            return this.searchChannelByCustomUrl(username);
         } catch (error) {
             console.error('Error fetching channel ID:', error);
             throw error;
@@ -112,8 +111,8 @@ const YouTubeAPI = {
             // Remove @ if present
             const searchTerm = customUrl.startsWith('@') ? customUrl.substring(1) : customUrl;
             
-            // If we have an access token and Google API is loaded, we can use it directly
-            if (this.accessToken && window.gapi?.client?.youtube) {
+            // If Google API is loaded, we can use it directly
+            if (window.gapi?.client?.youtube) {
                 try {
                     const response = await gapi.client.youtube.search.list({
                         part: 'snippet',
@@ -128,32 +127,37 @@ const YouTubeAPI = {
                     throw new Error('Channel not found');
                 } catch (error) {
                     console.error('Error using gapi for channel search:', error);
-                    // Fall back to regular fetch
+                    // Fall back to regular fetch with access token
                 }
             }
             
-            const url = this.createApiUrl(
-                'https://www.googleapis.com/youtube/v3/search',
-                {
-                    part: 'snippet',
-                    q: searchTerm,
-                    type: 'channel'
+            // Only use this if gapi is not available but we have an access token
+            if (this.accessToken) {
+                const url = this.createApiUrl(
+                    'https://www.googleapis.com/youtube/v3/search',
+                    {
+                        part: 'snippet',
+                        q: searchTerm,
+                        type: 'channel'
+                    }
+                );
+                
+                const response = await fetch(url, this.getFetchOptions());
+                
+                if (!response.ok) {
+                    throw new Error('Failed to search for channel');
                 }
-            );
-            
-            const response = await fetch(url, this.getFetchOptions());
-            
-            if (!response.ok) {
-                throw new Error('Failed to search for channel');
+                
+                const data = await response.json();
+                
+                if (data.items && data.items.length > 0) {
+                    return data.items[0].channelId || data.items[0].id.channelId;
+                }
+                
+                throw new Error('Channel not found');
+            } else {
+                throw new Error('Authentication required. Please sign in with Google.');
             }
-            
-            const data = await response.json();
-            
-            if (data.items && data.items.length > 0) {
-                return data.items[0].channelId || data.items[0].id.channelId;
-            }
-            
-            throw new Error('Channel not found');
         } catch (error) {
             console.error('Error searching for channel:', error);
             throw error;
@@ -165,8 +169,8 @@ const YouTubeAPI = {
         try {
             // First, get the upload playlist ID
             
-            // If we have an access token and Google API is loaded, we can use it directly
-            if (this.accessToken && window.gapi?.client?.youtube) {
+            // If Google API is loaded, we can use it directly
+            if (window.gapi?.client?.youtube) {
                 try {
                     // Get channel details
                     const channelResponse = await gapi.client.youtube.channels.list({
@@ -220,35 +224,40 @@ const YouTubeAPI = {
                     return videos;
                 } catch (error) {
                     console.error('Error using gapi for channel videos:', error);
-                    // Fall back to regular fetch
+                    // Fall back to regular fetch with access token
                 }
             }
             
-            // Fall back to regular fetch if gapi failed or isn't available
-            const url = this.createApiUrl(
-                'https://www.googleapis.com/youtube/v3/channels',
-                {
-                    part: 'contentDetails',
-                    id: channelId
+            // Only use this if gapi is not available but we have an access token
+            if (this.accessToken) {
+                // Fall back to regular fetch if gapi failed or isn't available
+                const url = this.createApiUrl(
+                    'https://www.googleapis.com/youtube/v3/channels',
+                    {
+                        part: 'contentDetails',
+                        id: channelId
+                    }
+                );
+                
+                const response = await fetch(url, this.getFetchOptions());
+                
+                if (!response.ok) {
+                    throw new Error('Failed to fetch channel details');
                 }
-            );
-            
-            const response = await fetch(url, this.getFetchOptions());
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch channel details');
+                
+                const data = await response.json();
+                
+                if (!data.items || data.items.length === 0) {
+                    throw new Error('Channel not found');
+                }
+                
+                const uploadsPlaylistId = data.items[0].contentDetails.relatedPlaylists.uploads;
+                
+                // Now get the videos from the uploads playlist
+                return this.getPlaylistVideos(uploadsPlaylistId, maxResults);
+            } else {
+                throw new Error('Authentication required. Please sign in with Google.');
             }
-            
-            const data = await response.json();
-            
-            if (!data.items || data.items.length === 0) {
-                throw new Error('Channel not found');
-            }
-            
-            const uploadsPlaylistId = data.items[0].contentDetails.relatedPlaylists.uploads;
-            
-            // Now get the videos from the uploads playlist
-            return this.getPlaylistVideos(uploadsPlaylistId, maxResults);
         } catch (error) {
             console.error('Error fetching channel videos:', error);
             throw error;

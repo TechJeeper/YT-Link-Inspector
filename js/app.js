@@ -11,10 +11,6 @@ const videosCount = document.getElementById('videos-count');
 const linksCount = document.getElementById('links-count');
 const brokenCount = document.getElementById('broken-count');
 
-// YouTube API key (you should use your own API key here)
-// For GitHub hosting, you'd normally handle this more securely
-const API_KEY = 'AIzaSyCzt6WAIBrlXJ_yCJqwqbCOelriHGBCArc';
-
 // Statistics
 let totalVideos = 0;
 let totalLinks = 0;
@@ -26,9 +22,9 @@ channelForm.addEventListener('submit', handleFormSubmit);
 
 // Initialize application
 function initApp() {
-    // Initialize YouTube API with your API key
+    // Initialize YouTube API
     if (window.YouTubeAPI) {
-        YouTubeAPI.init(API_KEY);
+        YouTubeAPI.init();
     }
     
     // Add event delegation for video result expansion
@@ -109,28 +105,25 @@ async function extractChannelId(url) {
                 // Custom URL: youtube.com/c/ChannelName or youtube.com/@Username
                 const username = pathname.split('/')[2];
                 
-                // If we're using the real YouTube API
-                if (window.YouTubeAPI) {
+                // Check if authenticated
+                if (window.GoogleAuth && !GoogleAuth.isAuthenticated) {
+                    throw new Error('Authentication required. Please sign in with Google to access YouTube data.');
+                } else if (window.YouTubeAPI) {
+                    // Use YouTube API with OAuth
                     statusMessage.textContent = 'Looking up channel by username...';
                     channelId = await YouTubeAPI.getChannelId(username);
-                } else {
-                    // For demo without API key
-                    statusMessage.textContent = 'Simulating channel lookup...';
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    channelId = 'UC_demo_channel_id_' + username;
                 }
             } else if (pathname.startsWith('/user/')) {
                 // Legacy username: youtube.com/user/Username
                 const username = pathname.split('/')[2];
                 
-                if (window.YouTubeAPI) {
+                // Check if authenticated
+                if (window.GoogleAuth && !GoogleAuth.isAuthenticated) {
+                    throw new Error('Authentication required. Please sign in with Google to access YouTube data.');
+                } else if (window.YouTubeAPI) {
+                    // Use YouTube API with OAuth
                     statusMessage.textContent = 'Looking up channel by legacy username...';
                     channelId = await YouTubeAPI.getChannelId(username);
-                } else {
-                    // For demo without API key
-                    statusMessage.textContent = 'Simulating channel lookup...';
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    channelId = 'UC_demo_channel_id_' + username;
                 }
             }
         }
@@ -138,7 +131,7 @@ async function extractChannelId(url) {
         return channelId;
     } catch (error) {
         console.error('Error extracting channel ID:', error);
-        throw new Error('Invalid YouTube channel URL');
+        throw error;
     }
 }
 
@@ -147,111 +140,61 @@ async function processChannel(channelId) {
     statusMessage.textContent = 'Fetching videos from channel...';
     
     try {
-        let videos;
-        
-        // If we're using the real YouTube API with OAuth
-        if (window.YouTubeAPI && (YouTubeAPI.hasAccessToken() || API_KEY !== 'YOUR_YOUTUBE_API_KEY')) {
-            videos = await YouTubeAPI.getChannelVideos(channelId);
-        } else {
-            // For demo without API key, use mock data
-            videos = await fetchChannelVideos(channelId);
-        }
+        // Fetch videos using YouTube API
+        const videos = await fetchChannelVideos(channelId);
         
         if (!videos || videos.length === 0) {
-            showError('No public videos found for this channel');
-            return;
+            throw new Error('No videos found in this channel');
         }
         
+        // Update the total videos count
         totalVideos = videos.length;
         updateStats();
         
-        statusMessage.textContent = `Processing ${videos.length} videos...`;
+        // Process each video to check for links
+        statusMessage.textContent = `Found ${videos.length} videos. Checking for links...`;
         
         // Clear previous results
         resultsContainer.innerHTML = '';
         
-        // Process each video
+        // Process videos and check links
         for (let i = 0; i < videos.length; i++) {
             const video = videos[i];
-            const videoIndex = i + 1;
-            
-            statusMessage.textContent = `Processing video ${videoIndex}/${videos.length}...`;
-            
+            statusMessage.textContent = `Checking video ${i + 1} of ${videos.length}: ${video.title}`;
             await processVideo(video);
         }
         
-        // Show results
-        statusMessage.textContent = 'Analysis complete!';
+        // Show the results section
+        loadingSection.style.display = 'none';
         resultsSection.style.display = 'block';
         
+        // Final stats update
+        updateStats();
     } catch (error) {
-        showError(`Error processing channel: ${error.message}`);
+        console.error('Error processing channel:', error);
+        throw error;
     }
 }
 
-// Fetch videos from a channel (simulated for this demo)
+// Fetch videos from a channel using the YouTube API
 async function fetchChannelVideos(channelId) {
-    // In a real application, you would use the YouTube API
-    // For this demo, we'll create mock data
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // Generate mock videos (5-10 random videos)
-    const videoCount = Math.floor(Math.random() * 6) + 5;
-    const videos = [];
-    
-    for (let i = 0; i < videoCount; i++) {
-        videos.push({
-            id: `video_${i}_${Date.now()}`,
-            title: `Sample Video ${i + 1}`,
-            description: generateMockDescription(),
-            thumbnail: 'https://via.placeholder.com/120x68',
-            url: `https://youtube.com/watch?v=mock_video_${i}`
-        });
+    try {
+        // Use YouTube API to get channel videos
+        if (window.YouTubeAPI) {
+            return await YouTubeAPI.getChannelVideos(channelId);
+        }
+        
+        throw new Error('Authentication required. Please sign in with Google to access YouTube data.');
+    } catch (error) {
+        console.error('Error fetching channel videos:', error);
+        throw error;
     }
-    
-    return videos;
-}
-
-// Generate a mock description with links
-function generateMockDescription() {
-    const linkCount = Math.floor(Math.random() * 6) + 1; // 1-6 links
-    const links = [];
-    
-    // Common link types
-    const linkTypes = [
-        'https://example.com/valid-link',
-        'https://broken-link-example.org/404',
-        'https://suspicious-domain-example.biz/',
-        'https://github.com/user/repo',
-        'https://twitter.com/username',
-        'https://instagram.com/username',
-        'https://parked-domain-example.com/'
-    ];
-    
-    let description = "This is a sample video description.\n\n";
-    
-    for (let i = 0; i < linkCount; i++) {
-        const randomIndex = Math.floor(Math.random() * linkTypes.length);
-        const link = linkTypes[randomIndex] + (i + 1);
-        links.push(link);
-        description += `Check out this link: ${link}\n`;
-    }
-    
-    return description;
 }
 
 // Process a single video
 async function processVideo(video) {
-    let links;
-    
-    // Use the LinkValidator if available
-    if (window.LinkValidator) {
-        links = LinkValidator.extractUrls(video.description);
-    } else {
-        links = extractLinks(video.description);
-    }
+    // Use the LinkValidator to extract and check URLs
+    const links = LinkValidator.extractUrls(video.description);
     
     if (links.length === 0) {
         // No links to process
@@ -266,15 +209,7 @@ async function processVideo(video) {
     const processedLinks = [];
     
     for (const link of links) {
-        let processedLink;
-        
-        // Use the LinkValidator if available
-        if (window.LinkValidator) {
-            processedLink = await LinkValidator.validateLink(link);
-        } else {
-            processedLink = await checkLink(link);
-        }
-        
+        const processedLink = await LinkValidator.validateLink(link);
         processedLinks.push(processedLink);
         
         if (processedLink.status !== 'valid') {
@@ -285,49 +220,6 @@ async function processVideo(video) {
     
     // Add to results
     appendVideoResult(video, processedLinks);
-}
-
-// Extract links from video description (fallback if LinkValidator not available)
-function extractLinks(description) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    const matches = description.match(urlRegex) || [];
-    
-    // Return unique links
-    return [...new Set(matches)];
-}
-
-// Check if a link is valid, broken, or suspicious (fallback if LinkValidator not available)
-async function checkLink(url) {
-    // In a real app, you would make an actual HTTP request to check the link
-    // For demo purposes, we'll simulate this
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 700));
-    
-    let status = 'valid';
-    let statusText = 'Valid Link';
-    
-    // Simulate different link statuses based on URL
-    if (url.includes('broken-link') || url.includes('404')) {
-        status = 'broken';
-        statusText = 'Broken Link (404 Not Found)';
-    } else if (url.includes('parked-domain')) {
-        status = 'suspicious';
-        statusText = 'Parked Domain';
-    } else if (url.includes('suspicious')) {
-        status = 'suspicious';
-        statusText = 'Suspicious Domain';
-    } else if (Math.random() < 0.1) {
-        // Randomly mark some links as broken (10% chance)
-        status = 'broken';
-        statusText = 'Connection Failed';
-    }
-    
-    return {
-        url,
-        status,
-        statusText
-    };
 }
 
 // Append a video result to the results container
