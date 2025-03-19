@@ -1,6 +1,8 @@
 // DOM Elements
 const channelForm = document.getElementById('channel-form');
 const channelInput = document.getElementById('channel-input');
+const startDateInput = document.getElementById('start-date');
+const endDateInput = document.getElementById('end-date');
 const loadingSection = document.getElementById('loading-section');
 const resultsSection = document.getElementById('results-section');
 const errorSection = document.getElementById('error-section');
@@ -11,6 +13,9 @@ const videosCount = document.getElementById('videos-count');
 const linksCount = document.getElementById('links-count');
 const brokenCount = document.getElementById('broken-count');
 const uncheckedCount = document.getElementById('unchecked-count');
+const prevPageBtn = document.getElementById('prev-page');
+const nextPageBtn = document.getElementById('next-page');
+const currentPageSpan = document.getElementById('current-page');
 
 // API Key Elements
 const apiKeyInput = document.getElementById('api-key-input');
@@ -19,6 +24,13 @@ const rememberApiKey = document.getElementById('remember-api-key');
 const apiKeyStatus = document.getElementById('api-key-status');
 const apiKeyHelpLink = document.getElementById('api-key-help-link');
 const apiKeyInstructions = document.getElementById('api-key-instructions');
+
+// Pagination state
+let currentPage = 1;
+let nextPageToken = '';
+let totalResults = 0;
+let currentChannelId = '';
+let currentOptions = {};
 
 // Statistics
 let totalVideos = 0;
@@ -34,6 +46,8 @@ document.addEventListener('DOMContentLoaded', initApp);
 channelForm.addEventListener('submit', handleFormSubmit);
 saveApiKeyBtn.addEventListener('click', saveApiKey);
 apiKeyHelpLink.addEventListener('click', toggleApiKeyInstructions);
+prevPageBtn.addEventListener('click', () => loadPage(currentPage - 1));
+nextPageBtn.addEventListener('click', () => loadPage(currentPage + 1));
 
 // Initialize application
 function initApp() {
@@ -54,6 +68,11 @@ function initApp() {
             }
         }
     });
+    
+    // Set max date for date inputs to today
+    const today = new Date().toISOString().split('T')[0];
+    startDateInput.max = today;
+    endDateInput.max = today;
     
     // Disable submit button if no API key is set
     updateSubmitButtonState();
@@ -159,7 +178,10 @@ async function handleFormSubmit(e) {
         return;
     }
     
-    // Reset counters
+    // Reset state
+    currentPage = 1;
+    nextPageToken = '';
+    totalResults = 0;
     totalVideos = 0;
     totalLinks = 0;
     totalIssues = 0;
@@ -183,8 +205,13 @@ async function handleFormSubmit(e) {
             throw new Error('Could not extract channel ID from the provided URL');
         }
         
-        console.log('Using Channel ID:', channelId); // Debug: Log the channel ID
-        await processChannel(channelId);
+        currentChannelId = channelId;
+        currentOptions = {
+            startDate: startDateInput.value || null,
+            endDate: endDateInput.value || null
+        };
+        
+        await loadPage(1);
         
     } catch (error) {
         showError(error.message);
@@ -247,49 +274,51 @@ async function extractChannelId(url) {
     }
 }
 
-// Process the channel
-async function processChannel(channelId) {
-    statusMessage.textContent = 'Fetching videos from channel...';
-    
+// Load a specific page of results
+async function loadPage(page) {
     try {
-        console.log('Fetching videos for channel ID:', channelId); // Debug
-        const videos = await YouTubeAPI.getChannelVideos(channelId);
+        loadingSection.style.display = 'block';
+        statusMessage.textContent = `Loading page ${page}...`;
         
-        if (videos.length === 0) {
-            showError('No public videos found for this channel');
-            return;
-        }
+        const options = {
+            ...currentOptions,
+            pageToken: page === 1 ? '' : nextPageToken
+        };
         
-        // Debug: Log the channel IDs of returned videos
-        console.log('Video count:', videos.length);
-        console.log('Expected channel ID:', channelId);
-        console.log('Sample video channel IDs:', videos.slice(0, 3).map(v => v.channelId));
+        const result = await YouTubeAPI.getChannelVideos(currentChannelId, options);
         
-        totalVideos = videos.length;
-        updateStats();
-        
-        statusMessage.textContent = `Processing ${videos.length} videos...`;
+        // Update pagination state
+        currentPage = page;
+        nextPageToken = result.nextPageToken;
+        totalResults = result.totalResults;
         
         // Clear previous results
         resultsContainer.innerHTML = '';
         
         // Process each video
-        for (let i = 0; i < videos.length; i++) {
-            const video = videos[i];
-            const videoIndex = i + 1;
-            
-            statusMessage.textContent = `Processing video ${videoIndex}/${videos.length}...`;
-            
+        for (const video of result.videos) {
             await processVideo(video);
         }
+        
+        // Update pagination controls
+        updatePaginationControls();
         
         // Show results
         statusMessage.textContent = 'Analysis complete!';
         resultsSection.style.display = 'block';
+        loadingSection.style.display = 'none';
         
     } catch (error) {
-        showError(`Error processing channel: ${error.message}`);
+        showError(`Error loading page: ${error.message}`);
+        loadingSection.style.display = 'none';
     }
+}
+
+// Update pagination controls
+function updatePaginationControls() {
+    prevPageBtn.disabled = currentPage === 1;
+    nextPageBtn.disabled = !nextPageToken;
+    currentPageSpan.textContent = currentPage;
 }
 
 // Process a single video

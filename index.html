@@ -18,7 +18,15 @@
         <main>
             <div class="api-key-section">
                 <h2><i class="fas fa-key"></i> YouTube API Key Setup</h2>
-                <p>To use this tool, you need a YouTube Data API key from Google. This key is only stored client side.</p>
+                <div class="api-key-explanation">
+                    <p>A YouTube API key is required to:</p>
+                    <ul>
+                        <li>Access YouTube's data services securely and legally</li>
+                        <li>Fetch video information from your specified channel</li>
+                        <li>Ensure reliable and uninterrupted access to YouTube's services</li>
+                    </ul>
+                    <p class="api-key-note"><i class="fas fa-shield-alt"></i> Your API key is used only in your browser and is never sent to our servers.</p>
+                </div>
                 <div class="api-key-input-group">
                     <input type="text" id="api-key-input" placeholder="Enter your YouTube API Key" autocomplete="off">
                     <button id="save-api-key-btn">
@@ -55,13 +63,24 @@
             </div>
 
             <div class="input-section">
-                <form id="channel-form">
-                    <div class="input-group">
-                        <input type="text" id="channel-input" placeholder="Enter YouTube Channel URL" required>
-                        <button type="submit" id="submit-btn">
-                            <i class="fas fa-search"></i> Inspect
-                        </button>
+                <form id="channel-form" class="channel-form">
+                    <div class="form-group">
+                        <label for="channel-input">YouTube Channel URL:</label>
+                        <input type="text" id="channel-input" placeholder="Enter YouTube channel URL (e.g., https://www.youtube.com/@ChannelName)" required>
                     </div>
+                    
+                    <div class="form-group date-range">
+                        <div class="date-input">
+                            <label for="start-date">Start Date:</label>
+                            <input type="date" id="start-date">
+                        </div>
+                        <div class="date-input">
+                            <label for="end-date">End Date:</label>
+                            <input type="date" id="end-date">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="submit-btn" class="btn btn-primary" disabled>Check Channel Links</button>
                 </form>
             </div>
 
@@ -71,31 +90,31 @@
             </div>
 
             <div class="results-section" id="results-section" style="display: none;">
-                <div class="summary-card">
-                    <h2>Inspection Summary</h2>
-                    <div class="summary-stats">
-                        <div class="stat">
-                            <span id="videos-count">0</span>
-                            <p>Videos Checked</p>
-                        </div>
-                        <div class="stat">
-                            <span id="links-count">0</span>
-                            <p>Links Found</p>
-                        </div>
-                        <div class="stat">
-                            <span id="broken-count">0</span>
-                            <p>Issues Found</p>
-                        </div>
-                        <div class="stat">
-                            <span id="unchecked-count">0</span>
-                            <p>Unchecked</p>
-                        </div>
+                <div class="stats-container">
+                    <div class="stat">
+                        <span id="videos-count">0</span>
+                        <p>Videos Found</p>
+                    </div>
+                    <div class="stat">
+                        <span id="links-count">0</span>
+                        <p>Links Found</p>
+                    </div>
+                    <div class="stat">
+                        <span id="broken-count">0</span>
+                        <p>Issues Found</p>
+                    </div>
+                    <div class="stat">
+                        <span id="unchecked-count">0</span>
+                        <p>Unchecked</p>
                     </div>
                 </div>
                 
-                <div class="results-list">
-                    <h2>Detailed Results</h2>
-                    <div id="results-container"></div>
+                <div id="results-container" class="results-container"></div>
+                
+                <div class="pagination-controls">
+                    <button id="prev-page" class="btn btn-secondary" disabled>Previous Page</button>
+                    <span id="page-info">Page <span id="current-page">1</span></span>
+                    <button id="next-page" class="btn btn-secondary" disabled>Next Page</button>
                 </div>
             </div>
 
@@ -110,6 +129,11 @@
 
         <footer>
             <p>YT Link Inspector &copy; 2023 | All Rights Reserved</p>
+            <div class="coffee-link">
+                <a href="https://buymeacoffee.com/printventory" target="_blank" rel="noopener noreferrer">
+                    <i class="fas fa-coffee"></i> Buy me a coffee
+                </a>
+            </div>
         </footer>
     </div>
 
