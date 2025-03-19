@@ -50,15 +50,20 @@ const GoogleAuth = {
     
     // Load the auth libraries
     loadAuthClient() {
-        // Initialize the tokenClient for Google Identity Services
-        this.initializeGsi();
-        
-        // Load the Google API client library
+        // Load the Google API client library first
         gapi.load('client', () => this.initClient());
+        
+        // We won't call initializeGsi directly, it will be triggered when gsi loads
     },
     
     // Initialize Google Identity Services
     initializeGsi() {
+        if (typeof google === 'undefined' || !google.accounts) {
+            console.log('Google Identity Services not yet loaded, will try again in 500ms');
+            setTimeout(() => this.initializeGsi(), 500);
+            return;
+        }
+        
         this.tokenClient = google.accounts.oauth2.initTokenClient({
             client_id: this.CLIENT_ID,
             scope: this.SCOPES,
@@ -91,6 +96,9 @@ const GoogleAuth = {
             } else {
                 this.updateSigninStatus(false);
             }
+            
+            // Initialize GSI after gapi client is initialized
+            this.initializeGsi();
         } catch (error) {
             console.error('Error initializing the API client library:', error);
             
