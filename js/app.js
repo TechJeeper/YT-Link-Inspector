@@ -3,6 +3,7 @@ const channelForm = document.getElementById('channel-form');
 const channelInput = document.getElementById('channel-input');
 const startDateInput = document.getElementById('start-date');
 const endDateInput = document.getElementById('end-date');
+const maxVideosSelect = document.getElementById('max-videos');
 const loadingSection = document.getElementById('loading-section');
 const resultsSection = document.getElementById('results-section');
 const errorSection = document.getElementById('error-section');
@@ -13,9 +14,6 @@ const videosCount = document.getElementById('videos-count');
 const linksCount = document.getElementById('links-count');
 const brokenCount = document.getElementById('broken-count');
 const uncheckedCount = document.getElementById('unchecked-count');
-const prevPageBtn = document.getElementById('prev-page');
-const nextPageBtn = document.getElementById('next-page');
-const currentPageSpan = document.getElementById('current-page');
 
 // API Key Elements
 const apiKeyInput = document.getElementById('api-key-input');
@@ -24,13 +22,6 @@ const rememberApiKey = document.getElementById('remember-api-key');
 const apiKeyStatus = document.getElementById('api-key-status');
 const apiKeyHelpLink = document.getElementById('api-key-help-link');
 const apiKeyInstructions = document.getElementById('api-key-instructions');
-
-// Pagination state
-let currentPage = 1;
-let nextPageToken = '';
-let totalResults = 0;
-let currentChannelId = '';
-let currentOptions = {};
 
 // Statistics
 let totalVideos = 0;
@@ -41,35 +32,11 @@ let totalUnchecked = 0;
 // Cookie name for storing API key
 const API_KEY_COOKIE = 'yt_link_inspector_api_key';
 
-// Global state for results pagination
-let allVideoResults = [];
-let videosPerPage = 10;
-let currentSortType = null;
-
 // Event Listeners
 document.addEventListener('DOMContentLoaded', initApp);
 channelForm.addEventListener('submit', handleFormSubmit);
 saveApiKeyBtn.addEventListener('click', saveApiKey);
 apiKeyHelpLink.addEventListener('click', toggleApiKeyInstructions);
-prevPageBtn.addEventListener('click', () => {
-    if (currentPage > 1) {
-        currentPage--;
-        displayCurrentPage();
-    }
-});
-nextPageBtn.addEventListener('click', () => {
-    const totalPages = Math.ceil(allVideoResults.length / videosPerPage);
-    if (currentPage < totalPages) {
-        currentPage++;
-        displayCurrentPage();
-    }
-});
-
-// Add event listeners for stat sorting
-videosCount.parentElement.addEventListener('click', () => sortResults('all'));
-linksCount.parentElement.addEventListener('click', () => sortResults('links'));
-brokenCount.parentElement.addEventListener('click', () => sortResults('issues'));
-uncheckedCount.parentElement.addEventListener('click', () => sortResults('unchecked'));
 
 // Initialize application
 function initApp() {
@@ -90,11 +57,6 @@ function initApp() {
             }
         }
     });
-    
-    // Set max date for date inputs to today
-    const today = new Date().toISOString().split('T')[0];
-    startDateInput.max = today;
-    endDateInput.max = today;
     
     // Disable submit button if no API key is set
     updateSubmitButtonState();
@@ -200,10 +162,17 @@ async function handleFormSubmit(e) {
         return;
     }
     
-    // Reset state
-    currentPage = 1;
-    allVideoResults = [];
-    currentSortType = null;
+    // Get date range if provided
+    const startDate = startDateInput.value ? startDateInput.value : null;
+    const endDate = endDateInput.value ? endDateInput.value : null;
+    
+    // Get maximum videos to check
+    let maxVideos = parseInt(maxVideosSelect.value);
+    if (maxVideosSelect.value === 'all') {
+        maxVideos = 10000; // Use a very high number to effectively get all videos
+    }
+    
+    // Reset counters
     totalVideos = 0;
     totalLinks = 0;
     totalIssues = 0;
@@ -227,166 +196,158 @@ async function handleFormSubmit(e) {
             throw new Error('Could not extract channel ID from the provided URL');
         }
         
-        const options = {
-            startDate: startDateInput.value || null,
-            endDate: endDateInput.value || null
-        };
+        console.log('Using Channel ID:', channelId); // Debug
         
-        await fetchAndProcessAllVideos(channelId, options);
+        // Display date range in status if provided
+        let dateRangeText = '';
+        if (startDate && endDate) {
+            dateRangeText = ` from ${startDate} to ${endDate}`;
+        } else if (startDate) {
+            dateRangeText = ` since ${startDate}`;
+        } else if (endDate) {
+            dateRangeText = ` until ${endDate}`;
+        }
         
-        // Display results
-        displayResults();
+        statusMessage.textContent = `Fetching up to ${maxVideos} videos${dateRangeText}...`;
+        
+        await processChannel(channelId, maxVideos, startDate, endDate);
+        
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        loadingSection.style.display = 'none';
+    }
+}
+
+// Extract Channel ID from various URL formats
+async function extractChannelId(url) {
+    try {
+        // Try to extract from URL patterns
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname;
+        const pathname = urlObj.pathname;
+        
+        let channelId = null;
+        let username = null;
+        
+        console.log('Extracting from URL:', url);
+        console.log('Pathname:', pathname);
+        
+        // Handle YouTube channel URL formats
+        if (hostname.includes('youtube.com')) {
+            if (pathname.startsWith('/channel/')) {
+                // Direct channel ID: youtube.com/channel/UC...
+                channelId = pathname.split('/')[2];
+                console.log('Extracted direct channel ID:', channelId); // Debug
+            } else if (pathname.startsWith('/c/')) {
+                // Custom URL: youtube.com/c/ChannelName
+                username = pathname.split('/')[2];
+                
+                statusMessage.textContent = 'Looking up channel by custom URL...';
+                console.log('Looking up channel ID for custom URL:', username); // Debug
+                channelId = await YouTubeAPI.getChannelId(username);
+                console.log('Found channel ID for custom URL:', channelId); // Debug
+            } else if (pathname.startsWith('/@')) {
+                // Handle format: youtube.com/@Username
+                username = pathname.substring(2); // Remove leading /@ to get Username
+                
+                statusMessage.textContent = 'Looking up channel by handle...';
+                console.log('Looking up channel ID for handle:', username); // Debug
+                channelId = await YouTubeAPI.getChannelId('@' + username);
+                console.log('Found channel ID for handle:', channelId); // Debug
+            } else if (pathname.startsWith('/user/')) {
+                // Legacy username: youtube.com/user/Username
+                username = pathname.split('/')[2];
+                
+                statusMessage.textContent = 'Looking up channel by legacy username...';
+                console.log('Looking up channel ID for legacy username:', username); // Debug
+                channelId = await YouTubeAPI.getChannelId(username);
+                console.log('Found channel ID for legacy username:', channelId); // Debug
+            }
+        }
+        
+        return channelId;
+    } catch (error) {
+        console.error('Error extracting channel ID:', error);
+        throw new Error('Invalid YouTube channel URL');
+    }
+}
+
+// Process the channel
+async function processChannel(channelId, maxVideos = 500, startDate = null, endDate = null) {
+    try {
+        statusMessage.textContent = 'Fetching videos from channel...';
+        
+        const videos = await YouTubeAPI.getChannelVideos(channelId, maxVideos, startDate, endDate);
+        
+        if (videos.length === 0) {
+            showError('No videos found for this channel in the specified date range');
+            return;
+        }
+        
+        // Debug: Log the channel IDs of returned videos
+        console.log('Video count:', videos.length);
+        console.log('Expected channel ID:', channelId);
+        console.log('Sample video channel IDs:', videos.slice(0, 3).map(v => v.channelId));
+        
+        totalVideos = videos.length;
+        updateStats();
+        
+        statusMessage.textContent = `Processing ${videos.length} videos...`;
+        
+        // Clear previous results
+        resultsContainer.innerHTML = '';
+        
+        // Process each video
+        for (let i = 0; i < videos.length; i++) {
+            const video = videos[i];
+            const videoIndex = i + 1;
+            
+            statusMessage.textContent = `Processing video ${videoIndex}/${videos.length}...`;
+            
+            await processVideo(video);
+        }
         
         // Show results
         statusMessage.textContent = 'Analysis complete!';
         resultsSection.style.display = 'block';
-        loadingSection.style.display = 'none';
-        
-        // Add active class to stats for sorting indication
-        updateStatHighlights('all');
         
     } catch (error) {
-        showError(error.message);
-        loadingSection.style.display = 'none';
+        showError(`Error processing channel: ${error.message}`);
     }
 }
 
-// Fetch and process all videos
-async function fetchAndProcessAllVideos(channelId, options) {
-    let nextPageToken = '';
-    let totalProcessed = 0;
-    
-    while (true) {
-        statusMessage.textContent = `Fetching videos... (${totalProcessed} processed)`;
-        
-        const result = await YouTubeAPI.getChannelVideos(channelId, {
-            ...options,
-            pageToken: nextPageToken
-        });
-        
-        // Process each video
-        for (const video of result.videos) {
-            const processedVideo = await processVideo(video);
-            allVideoResults.push(processedVideo);
-            totalProcessed++;
-        }
-        
-        if (!result.nextPageToken) {
-            break;
-        }
-        nextPageToken = result.nextPageToken;
-    }
-    
-    // Update total counts
-    totalVideos = allVideoResults.length;
-    updateStats();
-}
-
-// Process a single video and return the result
+// Process a single video
 async function processVideo(video) {
     const links = LinkValidator.extractUrls(video.description);
+    
+    if (links.length === 0) {
+        // No links to process
+        appendVideoResult(video, []);
+        return;
+    }
+    
+    totalLinks += links.length;
+    updateStats();
+    
+    // Check each link
     const processedLinks = [];
     
-    if (links.length > 0) {
-        totalLinks += links.length;
-        updateStats();
+    for (const link of links) {
+        const processedLink = await LinkValidator.validateLink(link);
+        processedLinks.push(processedLink);
         
-        for (const link of links) {
-            const processedLink = await LinkValidator.validateLink(link);
-            processedLinks.push(processedLink);
-            
-            if (processedLink.status === 'broken' || processedLink.status === 'suspicious') {
-                totalIssues++;
-                updateStats();
-            } else if (processedLink.status === 'unchecked') {
-                totalUnchecked++;
-                updateStats();
-            }
+        if (processedLink.status === 'broken' || processedLink.status === 'suspicious') {
+            totalIssues++;
+            updateStats();
+        } else if (processedLink.status === 'unchecked') {
+            totalUnchecked++;
+            updateStats();
         }
     }
     
-    return { video, links: processedLinks };
-}
-
-// Sort results based on clicked stat
-function sortResults(sortType) {
-    currentSortType = sortType;
-    displayResults();
-    updateStatHighlights(sortType);
-}
-
-// Update stat highlights to show active sort
-function updateStatHighlights(activeType) {
-    const statElements = [
-        videosCount.parentElement,
-        linksCount.parentElement,
-        brokenCount.parentElement,
-        uncheckedCount.parentElement
-    ];
-    
-    statElements.forEach(el => el.classList.remove('active-sort'));
-    
-    switch (activeType) {
-        case 'all':
-            videosCount.parentElement.classList.add('active-sort');
-            break;
-        case 'links':
-            linksCount.parentElement.classList.add('active-sort');
-            break;
-        case 'issues':
-            brokenCount.parentElement.classList.add('active-sort');
-            break;
-        case 'unchecked':
-            uncheckedCount.parentElement.classList.add('active-sort');
-            break;
-    }
-}
-
-// Display results based on current sort
-function displayResults() {
-    // Clear previous results
-    resultsContainer.innerHTML = '';
-    
-    // Make a copy of results for sorting
-    let sortedResults = [...allVideoResults];
-    
-    // Sort based on current sort type
-    if (currentSortType === 'links') {
-        // Sort by number of links (descending)
-        sortedResults.sort((a, b) => b.links.length - a.links.length);
-    } else if (currentSortType === 'issues') {
-        // Sort by number of issues (descending)
-        sortedResults.sort((a, b) => {
-            const issuesA = a.links.filter(link => 
-                link.status === 'broken' || link.status === 'suspicious').length;
-            const issuesB = b.links.filter(link => 
-                link.status === 'broken' || link.status === 'suspicious').length;
-            return issuesB - issuesA;
-        });
-        
-        // Filter to only show videos with issues
-        sortedResults = sortedResults.filter(result => {
-            return result.links.some(link => 
-                link.status === 'broken' || link.status === 'suspicious');
-        });
-    } else if (currentSortType === 'unchecked') {
-        // Sort by number of unchecked links (descending)
-        sortedResults.sort((a, b) => {
-            const uncheckedA = a.links.filter(link => link.status === 'unchecked').length;
-            const uncheckedB = b.links.filter(link => link.status === 'unchecked').length;
-            return uncheckedB - uncheckedA;
-        });
-        
-        // Filter to only show videos with unchecked links
-        sortedResults = sortedResults.filter(result => {
-            return result.links.some(link => link.status === 'unchecked');
-        });
-    }
-    
-    // Add each video result to the container
-    for (const result of sortedResults) {
-        appendVideoResult(result.video, result.links);
-    }
+    // Add to results
+    appendVideoResult(video, processedLinks);
 }
 
 // Append a video result to the results container
@@ -475,58 +436,4 @@ function getCookie(name) {
 
 function deleteCookie(name) {
     document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Strict`;
-}
-
-// Extract Channel ID from various URL formats
-async function extractChannelId(url) {
-    try {
-        // Try to extract from URL patterns
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname;
-        const pathname = urlObj.pathname;
-        
-        let channelId = null;
-        let username = null;
-        
-        console.log('Extracting from URL:', url);
-        console.log('Pathname:', pathname);
-        
-        // Handle YouTube channel URL formats
-        if (hostname.includes('youtube.com')) {
-            if (pathname.startsWith('/channel/')) {
-                // Direct channel ID: youtube.com/channel/UC...
-                channelId = pathname.split('/')[2];
-                console.log('Extracted direct channel ID:', channelId); // Debug
-            } else if (pathname.startsWith('/c/')) {
-                // Custom URL: youtube.com/c/ChannelName
-                username = pathname.split('/')[2];
-                
-                statusMessage.textContent = 'Looking up channel by custom URL...';
-                console.log('Looking up channel ID for custom URL:', username); // Debug
-                channelId = await YouTubeAPI.getChannelId(username);
-                console.log('Found channel ID for custom URL:', channelId); // Debug
-            } else if (pathname.startsWith('/@')) {
-                // Handle format: youtube.com/@Username
-                username = pathname.substring(2); // Remove leading /@ to get Username
-                
-                statusMessage.textContent = 'Looking up channel by handle...';
-                console.log('Looking up channel ID for handle:', username); // Debug
-                channelId = await YouTubeAPI.getChannelId('@' + username);
-                console.log('Found channel ID for handle:', channelId); // Debug
-            } else if (pathname.startsWith('/user/')) {
-                // Legacy username: youtube.com/user/Username
-                username = pathname.split('/')[2];
-                
-                statusMessage.textContent = 'Looking up channel by legacy username...';
-                console.log('Looking up channel ID for legacy username:', username); // Debug
-                channelId = await YouTubeAPI.getChannelId(username);
-                console.log('Found channel ID for legacy username:', channelId); // Debug
-            }
-        }
-        
-        return channelId;
-    } catch (error) {
-        console.error('Error extracting channel ID:', error);
-        throw new Error('Invalid YouTube channel URL');
-    }
 } 

@@ -160,33 +160,13 @@ header p {
 }
 
 .stat {
-    text-align: center;
     padding: 15px;
-    border-radius: var(--border-radius);
-    background-color: var(--light-gray);
-    box-shadow: var(--box-shadow);
-}
-
-.stat.clickable {
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.stat.clickable:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-}
-
-.stat.active-sort {
-    border-bottom: 3px solid var(--primary-color);
-    background-color: rgba(0, 123, 255, 0.1);
 }
 
 .stat span {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: var(--primary-color);
     display: block;
+    font-size: 2rem;
+    font-weight: bold;
     margin-bottom: 5px;
 }
 
@@ -335,58 +315,6 @@ footer {
     margin-top: 50px;
     padding: 20px 0;
     color: var(--dark-gray);
-}
-
-.footer-links {
-    margin-top: 15px;
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-}
-
-.footer-links a {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    text-decoration: none;
-    border-radius: 24px;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.github-link {
-    background-color: #24292e;
-    color: #ffffff;
-}
-
-.github-link:hover {
-    background-color: #2f363d;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.coffee-link a {
-    background-color: #FFDD00;
-    color: #000000;
-}
-
-.coffee-link a:hover {
-    background-color: #FFE333;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.footer-links i {
-    font-size: 1.2em;
-}
-
-@media (max-width: 576px) {
-    .footer-links {
-        flex-direction: column;
-        align-items: center;
-    }
 }
 
 /* Responsive Styles */
@@ -597,87 +525,68 @@ footer {
     background-color: rgba(255, 0, 0, 0.05);
 }
 
-.channel-form {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
-}
-
+/* Form Styles */
 .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 1rem;
 }
 
 .form-group label {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 0.5rem;
     font-weight: 500;
+    color: var(--dark-gray);
 }
 
-.form-group input {
+.form-group input[type="text"],
+.form-group input[type="date"],
+.form-group select {
     width: 100%;
-    padding: 10px;
-    border: 1px solid #ddd;
+    padding: 10px 15px;
+    border: 1px solid var(--light-gray);
     border-radius: 4px;
+    font-size: 1rem;
+    transition: border-color 0.2s;
 }
 
-.date-range {
+.form-group input[type="text"]:focus,
+.form-group input[type="date"]:focus,
+.form-group select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+.date-filter .date-inputs {
     display: flex;
-    gap: 20px;
+    gap: 1rem;
 }
 
-.date-input {
+.date-filter .date-field {
     flex: 1;
 }
 
-.date-input input[type="date"] {
+#submit-btn {
     width: 100%;
-    padding: 10px;
-    border: 1px solid #ddd;
+    padding: 12px;
+    font-size: 1rem;
+    margin-top: 1rem;
+}
+
+.primary-button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
     border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
 }
 
-.results-container {
-    margin-top: 30px;
+.primary-button:hover {
+    background-color: #c31f1f;
 }
 
-.api-key-explanation {
-    margin-bottom: 20px;
-    padding: 15px;
+.primary-button:disabled {
     background-color: var(--light-gray);
-    border-radius: var(--border-radius);
-    border-left: 4px solid var(--primary-color);
-}
-
-.api-key-explanation ul {
-    list-style-type: none;
-    padding-left: 25px;
-    margin: 10px 0;
-}
-
-.api-key-explanation li {
-    margin: 8px 0;
-    position: relative;
-}
-
-.api-key-explanation li:before {
-    content: "\f00c";
-    font-family: "Font Awesome 6 Free";
-    font-weight: 900;
-    color: var(--primary-color);
-    position: absolute;
-    left: -25px;
-    top: 2px;
-}
-
-.api-key-note {
-    margin-top: 15px;
-    color: var(--secondary-color);
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.api-key-note i {
-    color: var(--primary-color);
+    cursor: not-allowed;
+    opacity: 0.7;
 } 
