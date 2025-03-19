@@ -1,5 +1,16 @@
 // Link Validator Service
 const LinkValidator = {
+    // Known sites that block HEAD/GET requests but are typically valid
+    knownValidDomains: [
+        'walmart.com', 'ebay.com', 'ebay.co.uk',
+        'bestbuy.com', 'target.com'
+    ],
+
+    // Amazon domains for product checking
+    amazonDomains: [
+        'amazon.com', 'amazon.co.uk', 'amazon.ca', 'amzn.to'
+    ],
+
     // Function to validate multiple links simultaneously
     async validateLinks(links) {
         const promises = links.map(link => this.validateLink(link));
@@ -9,6 +20,39 @@ const LinkValidator = {
     // Function to validate a single link with retries
     async validateLink(url, maxRetries = 3) {
         let lastError = null;
+        
+        try {
+            // First check if this is a known valid domain or Amazon
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname.toLowerCase();
+            
+            // Check if it's an Amazon domain
+            const isAmazon = this.amazonDomains.some(known => 
+                domain === known || domain.endsWith('.' + known)
+            );
+            
+            if (isAmazon) {
+                return await this.checkAmazonProduct(url, maxRetries);
+            }
+            
+            // Check other known valid domains
+            const isKnownDomain = this.knownValidDomains.some(known => 
+                domain === known || domain.endsWith('.' + known)
+            );
+            
+            if (isKnownDomain) {
+                return {
+                    url,
+                    status: 'valid',
+                    statusText: 'Valid Link (Known Domain)',
+                    statusCode: 200,
+                    attempts: 1
+                };
+            }
+        } catch (urlError) {
+            // If URL parsing fails, continue with normal validation
+            console.warn('Error parsing URL:', urlError);
+        }
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
@@ -20,46 +64,46 @@ const LinkValidator = {
                     const response = await fetch(url, {
                         method: 'HEAD',
                         redirect: 'follow',
-                        mode: 'no-cors', // This allows checking external URLs
-                        signal: controller.signal
+                        signal: controller.signal,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (compatible; LinkChecker/1.0)'
+                        }
                     });
                     
                     clearTimeout(timeout);
                     
-                    // Since we're using no-cors, we won't get status codes
-                    // But if we reach here, the request didn't fail
-                    return {
-                        url,
-                        status: 'valid',
-                        statusText: 'Valid Link',
-                        statusCode: 200,
-                        attempts: attempt
-                    };
+                    // Check if we got a 405 Method Not Allowed
+                    if (response.status === 405) {
+                        // Try GET request instead
+                        return await this.fallbackToGet(url, controller);
+                    }
                     
-                } catch (fetchError) {
-                    clearTimeout(timeout);
-                    
-                    // Try a GET request as fallback (some servers don't support HEAD)
-                    try {
-                        const getResponse = await fetch(url, {
-                            method: 'GET',
-                            redirect: 'follow',
-                            mode: 'no-cors', // This allows checking external URLs
-                            signal: controller.signal
-                        });
-                        
+                    // Handle other response statuses
+                    if (response.ok) {
                         return {
                             url,
                             status: 'valid',
                             statusText: 'Valid Link',
-                            statusCode: 200,
+                            statusCode: response.status,
                             attempts: attempt
                         };
-                        
-                    } catch (getError) {
-                        // If both HEAD and GET fail, throw the error
-                        throw getError;
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
                     }
+                    
+                } catch (fetchError) {
+                    clearTimeout(timeout);
+                    
+                    // If it's a 405 or network error, try GET
+                    if (fetchError.message.includes('405') || !fetchError.message.includes('HTTP')) {
+                        try {
+                            return await this.fallbackToGet(url, controller);
+                        } catch (getError) {
+                            throw getError;
+                        }
+                    }
+                    
+                    throw fetchError;
                 }
                 
             } catch (error) {
@@ -83,6 +127,7 @@ const LinkValidator = {
                 // If this is the last attempt, return the error result
                 if (attempt === maxRetries) {
                     let statusText = 'Connection Failed';
+                    let statusCode = 0;
                     
                     // Determine more specific error messages
                     if (error.message.includes('ENOTFOUND') || error.message.includes('not found')) {
@@ -91,13 +136,29 @@ const LinkValidator = {
                         statusText = 'Connection Refused';
                     } else if (error.message.includes('certificate')) {
                         statusText = 'SSL Certificate Error';
+                    } else if (error.message.startsWith('HTTP ')) {
+                        // Extract status code from HTTP error
+                        statusCode = parseInt(error.message.split(' ')[1]);
+                        switch (statusCode) {
+                            case 404:
+                                statusText = 'Page Not Found';
+                                break;
+                            case 403:
+                                statusText = 'Access Forbidden';
+                                break;
+                            case 500:
+                                statusText = 'Server Error';
+                                break;
+                            default:
+                                statusText = `HTTP Error ${statusCode}`;
+                        }
                     }
                     
                     return {
                         url,
                         status: 'broken',
                         statusText: `${statusText} (${maxRetries} attempts failed)`,
-                        statusCode: 0,
+                        statusCode: statusCode,
                         error: error.message,
                         attempts: attempt
                     };
@@ -117,6 +178,101 @@ const LinkValidator = {
             error: lastError?.message,
             attempts: maxRetries
         };
+    },
+    
+    // Check Amazon product availability
+    async checkAmazonProduct(url, maxRetries = 3) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                redirect: 'follow',
+                signal: controller.signal,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+            });
+            
+            clearTimeout(timeout);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const text = await response.text();
+            
+            // Check for common "product not available" patterns
+            const unavailablePatterns = [
+                'Currently unavailable',
+                'We don\'t know when or if this item will be back in stock',
+                'This page no longer exists',
+                'Looking for something?',
+                'We couldn\'t find that page',
+                'The Web address you entered is not a functioning page on our site'
+            ];
+            
+            const hasUnavailablePattern = unavailablePatterns.some(pattern => 
+                text.includes(pattern)
+            );
+            
+            if (hasUnavailablePattern) {
+                return {
+                    url,
+                    status: 'broken',
+                    statusText: 'Product No Longer Available',
+                    statusCode: 200,
+                    attempts: 1
+                };
+            }
+            
+            return {
+                url,
+                status: 'valid',
+                statusText: 'Product Available',
+                statusCode: 200,
+                attempts: 1
+            };
+            
+        } catch (error) {
+            clearTimeout(timeout);
+            console.error('Error checking Amazon product:', error);
+            
+            // Return a more specific error for Amazon products
+            return {
+                url,
+                status: 'broken',
+                statusText: 'Unable to Check Product Availability',
+                statusCode: error.message.startsWith('HTTP') ? parseInt(error.message.split(' ')[1]) : 0,
+                error: error.message,
+                attempts: 1
+            };
+        }
+    },
+    
+    // Fallback to GET request
+    async fallbackToGet(url, controller) {
+        const getResponse = await fetch(url, {
+            method: 'GET',
+            redirect: 'follow',
+            signal: controller.signal,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; LinkChecker/1.0)'
+            }
+        });
+        
+        if (getResponse.ok) {
+            return {
+                url,
+                status: 'valid',
+                statusText: 'Valid Link',
+                statusCode: getResponse.status,
+                attempts: 1
+            };
+        } else {
+            throw new Error(`HTTP ${getResponse.status}`);
+        }
     },
     
     // Check if a domain appears suspicious
