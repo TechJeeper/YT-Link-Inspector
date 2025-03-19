@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YT Link Inspector</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <meta name="google-signin-client_id" content="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com">
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>YT Link Inspector</h1>
+            <p>Check your YouTube channel videos for broken links in descriptions</p>
+        </header>
+
+        <main>
+            <div class="auth-section" id="auth-section">
+                <div class="auth-card">
+                    <h2>Get Started</h2>
+                    <p>Sign in with your Google account to access your YouTube data</p>
+                    <div class="auth-options">
+                        <button id="authorize-button" class="google-auth-btn">
+                            <i class="fab fa-google"></i> Sign in with Google
+                        </button>
+                        <div class="auth-divider">
+                            <span>or</span>
+                        </div>
+                        <button id="demo-mode-button" class="demo-mode-btn">
+                            <i class="fas fa-vial"></i> Try Demo Mode
+                        </button>
+                    </div>
+                    <p class="auth-note">
+                        <i class="fas fa-info-circle"></i> Your data stays private. Authorization is only used to access your YouTube videos.
+                    </p>
+                </div>
+            </div>
+
+            <div class="input-section" id="input-section" style="display: none;">
+                <div class="user-info" id="user-info" style="display: none;">
+                    <div class="user-profile">
+                        <img id="user-image" src="" alt="Profile" class="user-image">
+                        <div class="user-details">
+                            <span id="user-name">User Name</span>
+                            <button id="sign-out-btn" class="sign-out-btn">
+                                <i class="fas fa-sign-out-alt"></i> Sign Out
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <form id="channel-form">
+                    <div class="input-group">
+                        <input type="text" id="channel-input" placeholder="Enter YouTube Channel URL" required>
+                        <button type="submit" id="submit-btn">
+                            <i class="fas fa-search"></i> Inspect
+                        </button>
+                    </div>
+                    <div class="channel-options" id="your-channels" style="display: none;">
+                        <p>Or select one of your channels:</p>
+                        <div id="user-channels" class="user-channels-list"></div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="loading-section" id="loading-section" style="display: none;">
+                <div class="loader"></div>
+                <p id="status-message">Fetching videos from channel...</p>
+            </div>
+
+            <div class="results-section" id="results-section" style="display: none;">
+                <div class="summary-card">
+                    <h2>Inspection Summary</h2>
+                    <div class="summary-stats">
+                        <div class="stat">
+                            <span id="videos-count">0</span>
+                            <p>Videos Checked</p>
+                        </div>
+                        <div class="stat">
+                            <span id="links-count">0</span>
+                            <p>Links Found</p>
+                        </div>
+                        <div class="stat">
+                            <span id="broken-count">0</span>
+                            <p>Issues Found</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="results-list">
+                    <h2>Detailed Results</h2>
+                    <div id="results-container"></div>
+                </div>
+            </div>
+
+            <div class="error-section" id="error-section" style="display: none;">
+                <div class="error-icon">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <h2>Error</h2>
+                <p id="error-message"></p>
+            </div>
+        </main>
+
+        <footer>
+            <p>YT Link Inspector &copy; 2023 | All Rights Reserved</p>
+        </footer>
+    </div>
+
+    <!-- Load utility modules first -->
+    <script src="js/link-validator.js"></script>
+    <script src="js/youtube-api.js"></script>
+    <script src="js/auth.js"></script>
+    
+    <!-- Load main app script -->
+    <script src="js/app.js"></script>
+</body>
+</html> 
