@@ -41,13 +41,28 @@ let totalUnchecked = 0;
 // Cookie name for storing API key
 const API_KEY_COOKIE = 'yt_link_inspector_api_key';
 
+// Global state for results pagination
+let allVideoResults = [];
+let videosPerPage = 10;
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', initApp);
 channelForm.addEventListener('submit', handleFormSubmit);
 saveApiKeyBtn.addEventListener('click', saveApiKey);
 apiKeyHelpLink.addEventListener('click', toggleApiKeyInstructions);
-prevPageBtn.addEventListener('click', () => loadPage(currentPage - 1));
-nextPageBtn.addEventListener('click', () => loadPage(currentPage + 1));
+prevPageBtn.addEventListener('click', () => {
+    if (currentPage > 1) {
+        currentPage--;
+        displayCurrentPage();
+    }
+});
+nextPageBtn.addEventListener('click', () => {
+    const totalPages = Math.ceil(allVideoResults.length / videosPerPage);
+    if (currentPage < totalPages) {
+        currentPage++;
+        displayCurrentPage();
+    }
+});
 
 // Initialize application
 function initApp() {
@@ -180,8 +195,7 @@ async function handleFormSubmit(e) {
     
     // Reset state
     currentPage = 1;
-    nextPageToken = '';
-    totalResults = 0;
+    allVideoResults = [];
     totalVideos = 0;
     totalLinks = 0;
     totalIssues = 0;
@@ -205,103 +219,15 @@ async function handleFormSubmit(e) {
             throw new Error('Could not extract channel ID from the provided URL');
         }
         
-        currentChannelId = channelId;
-        currentOptions = {
+        const options = {
             startDate: startDateInput.value || null,
             endDate: endDateInput.value || null
         };
         
-        await loadPage(1);
+        await fetchAndProcessAllVideos(channelId, options);
         
-    } catch (error) {
-        showError(error.message);
-    } finally {
-        loadingSection.style.display = 'none';
-    }
-}
-
-// Extract Channel ID from various URL formats
-async function extractChannelId(url) {
-    try {
-        // Try to extract from URL patterns
-        const urlObj = new URL(url);
-        const hostname = urlObj.hostname;
-        const pathname = urlObj.pathname;
-        
-        let channelId = null;
-        let username = null;
-        
-        console.log('Extracting from URL:', url);
-        console.log('Pathname:', pathname);
-        
-        // Handle YouTube channel URL formats
-        if (hostname.includes('youtube.com')) {
-            if (pathname.startsWith('/channel/')) {
-                // Direct channel ID: youtube.com/channel/UC...
-                channelId = pathname.split('/')[2];
-                console.log('Extracted direct channel ID:', channelId); // Debug
-            } else if (pathname.startsWith('/c/')) {
-                // Custom URL: youtube.com/c/ChannelName
-                username = pathname.split('/')[2];
-                
-                statusMessage.textContent = 'Looking up channel by custom URL...';
-                console.log('Looking up channel ID for custom URL:', username); // Debug
-                channelId = await YouTubeAPI.getChannelId(username);
-                console.log('Found channel ID for custom URL:', channelId); // Debug
-            } else if (pathname.startsWith('/@')) {
-                // Handle format: youtube.com/@Username
-                username = pathname.substring(2); // Remove leading /@ to get Username
-                
-                statusMessage.textContent = 'Looking up channel by handle...';
-                console.log('Looking up channel ID for handle:', username); // Debug
-                channelId = await YouTubeAPI.getChannelId('@' + username);
-                console.log('Found channel ID for handle:', channelId); // Debug
-            } else if (pathname.startsWith('/user/')) {
-                // Legacy username: youtube.com/user/Username
-                username = pathname.split('/')[2];
-                
-                statusMessage.textContent = 'Looking up channel by legacy username...';
-                console.log('Looking up channel ID for legacy username:', username); // Debug
-                channelId = await YouTubeAPI.getChannelId(username);
-                console.log('Found channel ID for legacy username:', channelId); // Debug
-            }
-        }
-        
-        return channelId;
-    } catch (error) {
-        console.error('Error extracting channel ID:', error);
-        throw new Error('Invalid YouTube channel URL');
-    }
-}
-
-// Load a specific page of results
-async function loadPage(page) {
-    try {
-        loadingSection.style.display = 'block';
-        statusMessage.textContent = `Loading page ${page}...`;
-        
-        const options = {
-            ...currentOptions,
-            pageToken: page === 1 ? '' : nextPageToken
-        };
-        
-        const result = await YouTubeAPI.getChannelVideos(currentChannelId, options);
-        
-        // Update pagination state
-        currentPage = page;
-        nextPageToken = result.nextPageToken;
-        totalResults = result.totalResults;
-        
-        // Clear previous results
-        resultsContainer.innerHTML = '';
-        
-        // Process each video
-        for (const video of result.videos) {
-            await processVideo(video);
-        }
-        
-        // Update pagination controls
-        updatePaginationControls();
+        // Display first page of results
+        displayCurrentPage();
         
         // Show results
         statusMessage.textContent = 'Analysis complete!';
@@ -309,49 +235,92 @@ async function loadPage(page) {
         loadingSection.style.display = 'none';
         
     } catch (error) {
-        showError(`Error loading page: ${error.message}`);
+        showError(error.message);
         loadingSection.style.display = 'none';
     }
 }
 
-// Update pagination controls
-function updatePaginationControls() {
-    prevPageBtn.disabled = currentPage === 1;
-    nextPageBtn.disabled = !nextPageToken;
-    currentPageSpan.textContent = currentPage;
-}
-
-// Process a single video
-async function processVideo(video) {
-    const links = LinkValidator.extractUrls(video.description);
+// Fetch and process all videos
+async function fetchAndProcessAllVideos(channelId, options) {
+    let nextPageToken = '';
+    let totalProcessed = 0;
     
-    if (links.length === 0) {
-        // No links to process
-        appendVideoResult(video, []);
-        return;
+    while (true) {
+        statusMessage.textContent = `Fetching videos... (${totalProcessed} processed)`;
+        
+        const result = await YouTubeAPI.getChannelVideos(channelId, {
+            ...options,
+            pageToken: nextPageToken
+        });
+        
+        // Process each video
+        for (const video of result.videos) {
+            const processedVideo = await processVideo(video);
+            allVideoResults.push(processedVideo);
+            totalProcessed++;
+        }
+        
+        if (!result.nextPageToken) {
+            break;
+        }
+        nextPageToken = result.nextPageToken;
     }
     
-    totalLinks += links.length;
+    // Update total counts
+    totalVideos = allVideoResults.length;
     updateStats();
-    
-    // Check each link
+}
+
+// Process a single video and return the result
+async function processVideo(video) {
+    const links = LinkValidator.extractUrls(video.description);
     const processedLinks = [];
     
-    for (const link of links) {
-        const processedLink = await LinkValidator.validateLink(link);
-        processedLinks.push(processedLink);
+    if (links.length > 0) {
+        totalLinks += links.length;
+        updateStats();
         
-        if (processedLink.status === 'broken' || processedLink.status === 'suspicious') {
-            totalIssues++;
-            updateStats();
-        } else if (processedLink.status === 'unchecked') {
-            totalUnchecked++;
-            updateStats();
+        for (const link of links) {
+            const processedLink = await LinkValidator.validateLink(link);
+            processedLinks.push(processedLink);
+            
+            if (processedLink.status === 'broken' || processedLink.status === 'suspicious') {
+                totalIssues++;
+                updateStats();
+            } else if (processedLink.status === 'unchecked') {
+                totalUnchecked++;
+                updateStats();
+            }
         }
     }
     
-    // Add to results
-    appendVideoResult(video, processedLinks);
+    return { video, links: processedLinks };
+}
+
+// Display current page of results
+function displayCurrentPage() {
+    const startIndex = (currentPage - 1) * videosPerPage;
+    const endIndex = startIndex + videosPerPage;
+    const pageResults = allVideoResults.slice(startIndex, endIndex);
+    
+    // Clear previous results
+    resultsContainer.innerHTML = '';
+    
+    // Add each video result to the container
+    for (const result of pageResults) {
+        appendVideoResult(result.video, result.links);
+    }
+    
+    // Update pagination controls
+    updatePaginationControls();
+}
+
+// Update pagination controls
+function updatePaginationControls() {
+    const totalPages = Math.ceil(allVideoResults.length / videosPerPage);
+    prevPageBtn.disabled = currentPage === 1;
+    nextPageBtn.disabled = currentPage >= totalPages;
+    currentPageSpan.textContent = currentPage;
 }
 
 // Append a video result to the results container
@@ -440,4 +409,58 @@ function getCookie(name) {
 
 function deleteCookie(name) {
     document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Strict`;
+}
+
+// Extract Channel ID from various URL formats
+async function extractChannelId(url) {
+    try {
+        // Try to extract from URL patterns
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname;
+        const pathname = urlObj.pathname;
+        
+        let channelId = null;
+        let username = null;
+        
+        console.log('Extracting from URL:', url);
+        console.log('Pathname:', pathname);
+        
+        // Handle YouTube channel URL formats
+        if (hostname.includes('youtube.com')) {
+            if (pathname.startsWith('/channel/')) {
+                // Direct channel ID: youtube.com/channel/UC...
+                channelId = pathname.split('/')[2];
+                console.log('Extracted direct channel ID:', channelId); // Debug
+            } else if (pathname.startsWith('/c/')) {
+                // Custom URL: youtube.com/c/ChannelName
+                username = pathname.split('/')[2];
+                
+                statusMessage.textContent = 'Looking up channel by custom URL...';
+                console.log('Looking up channel ID for custom URL:', username); // Debug
+                channelId = await YouTubeAPI.getChannelId(username);
+                console.log('Found channel ID for custom URL:', channelId); // Debug
+            } else if (pathname.startsWith('/@')) {
+                // Handle format: youtube.com/@Username
+                username = pathname.substring(2); // Remove leading /@ to get Username
+                
+                statusMessage.textContent = 'Looking up channel by handle...';
+                console.log('Looking up channel ID for handle:', username); // Debug
+                channelId = await YouTubeAPI.getChannelId('@' + username);
+                console.log('Found channel ID for handle:', channelId); // Debug
+            } else if (pathname.startsWith('/user/')) {
+                // Legacy username: youtube.com/user/Username
+                username = pathname.split('/')[2];
+                
+                statusMessage.textContent = 'Looking up channel by legacy username...';
+                console.log('Looking up channel ID for legacy username:', username); // Debug
+                channelId = await YouTubeAPI.getChannelId(username);
+                console.log('Found channel ID for legacy username:', channelId); // Debug
+            }
+        }
+        
+        return channelId;
+    } catch (error) {
+        console.error('Error extracting channel ID:', error);
+        throw new Error('Invalid YouTube channel URL');
+    }
 } 
