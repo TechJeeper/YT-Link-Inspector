@@ -6,66 +6,89 @@ const LinkValidator = {
         return Promise.all(promises);
     },
     
-    // Function to validate a single link
-    async validateLink(url) {
-        try {
-            // In a full implementation, we would make a real HTTP request
-            // For this demo/prototype, we'll use a proxy or simulate the check
-            
-            // For a real implementation on GitHub pages, we'd need to use a proxy service
-            // as direct CORS requests to arbitrary URLs won't work.
-            // Example: const response = await fetch(`https://your-proxy-service.com/check?url=${encodeURIComponent(url)}`);
-            
-            // Simulate a validation check with varying response times
-            await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 1000));
-            
-            // For demo purposes, we'll determine the status based on URL patterns
-            let status = 'valid';
-            let statusText = 'Valid Link';
-            let statusCode = 200;
-            
-            // Simulate different link statuses based on URL patterns
-            if (url.includes('broken') || url.includes('404')) {
-                status = 'broken';
-                statusText = 'Broken Link (404 Not Found)';
-                statusCode = 404;
-            } else if (url.includes('parked-domain') || url.includes('.xyz')) {
-                status = 'suspicious';
-                statusText = 'Parked Domain';
-                statusCode = 200;
-            } else if (url.includes('suspicious') || url.match(/\.(biz|info|top)($|\/)/)) {
-                status = 'suspicious';
-                statusText = 'Suspicious Domain';
-                statusCode = 200;
-            } else if (url.includes('timeout') || url.includes('slow')) {
-                status = 'broken';
-                statusText = 'Connection Timeout';
-                statusCode = 408;
-            } else if (Math.random() < 0.1) {
-                // Randomly mark some links as broken (10% chance)
-                status = 'broken';
-                statusText = 'Connection Failed';
-                statusCode = 503;
+    // Function to validate a single link with retries
+    async validateLink(url, maxRetries = 3) {
+        let lastError = null;
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // In a full implementation, we would make a real HTTP request
+                // For this demo/prototype, we'll use a proxy or simulate the check
+                
+                // For a real implementation on GitHub pages, we'd need to use a proxy service
+                // as direct CORS requests to arbitrary URLs won't work.
+                // Example: const response = await fetch(`https://your-proxy-service.com/check?url=${encodeURIComponent(url)}`);
+                
+                // Simulate a validation check with varying response times
+                await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 1000));
+                
+                // For demo purposes, we'll determine the status based on URL patterns
+                let status = 'valid';
+                let statusText = 'Valid Link';
+                let statusCode = 200;
+                
+                // Simulate different link statuses based on URL patterns
+                if (url.includes('broken') || url.includes('404')) {
+                    status = 'broken';
+                    statusText = 'Broken Link (404 Not Found)';
+                    statusCode = 404;
+                } else if (url.includes('parked-domain') || url.includes('.xyz')) {
+                    status = 'suspicious';
+                    statusText = 'Parked Domain';
+                    statusCode = 200;
+                } else if (url.includes('suspicious') || url.match(/\.(biz|info|top)($|\/)/)) {
+                    status = 'suspicious';
+                    statusText = 'Suspicious Domain';
+                    statusCode = 200;
+                } else if (url.includes('timeout') || url.includes('slow')) {
+                    status = 'broken';
+                    statusText = 'Connection Timeout';
+                    statusCode = 408;
+                } else if (Math.random() < 0.1) {
+                    // Randomly mark some links as broken (10% chance)
+                    status = 'broken';
+                    statusText = 'Connection Failed';
+                    statusCode = 503;
+                }
+                
+                return {
+                    url,
+                    status,
+                    statusText,
+                    statusCode,
+                    attempts: attempt
+                };
+                
+            } catch (error) {
+                console.error(`Error validating link (attempt ${attempt}/${maxRetries}):`, url, error);
+                lastError = error;
+                
+                // If this is the last attempt, return the error result
+                if (attempt === maxRetries) {
+                    return {
+                        url,
+                        status: 'broken',
+                        statusText: `Error checking link (${maxRetries} attempts failed)`,
+                        statusCode: 0,
+                        error: error.message,
+                        attempts: attempt
+                    };
+                }
+                
+                // Wait before retrying (exponential backoff)
+                await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
             }
-            
-            return {
-                url,
-                status,
-                statusText,
-                statusCode
-            };
-            
-        } catch (error) {
-            console.error('Error validating link:', url, error);
-            
-            return {
-                url,
-                status: 'broken',
-                statusText: 'Error checking link',
-                statusCode: 0,
-                error: error.message
-            };
         }
+        
+        // This should never be reached due to the return in the last attempt
+        return {
+            url,
+            status: 'broken',
+            statusText: 'Unexpected error during validation',
+            statusCode: 0,
+            error: lastError?.message,
+            attempts: maxRetries
+        };
     },
     
     // Check if a domain appears suspicious

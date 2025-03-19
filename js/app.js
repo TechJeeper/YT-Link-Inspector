@@ -363,6 +363,7 @@ function renderLinks(links) {
             </a>
             <span class="link-status status-${link.status}">
                 ${link.statusText}
+                ${link.attempts > 1 ? ` (${link.attempts} attempts)` : ''}
             </span>
         </div>
     `).join('');
