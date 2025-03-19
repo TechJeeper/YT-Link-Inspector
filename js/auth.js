@@ -1,7 +1,7 @@
 // Google API configuration
 const GoogleAuth = {
     // Replace with your actual OAuth client ID from Google Cloud Console
-    CLIENT_ID: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+    CLIENT_ID: '655723817808-jkh1r6cms9vll7ehe4r9esvum85288ug.apps.googleusercontent.com',
     
     // API key to use after authentication (optional for OAuth)
     API_KEY: 'YOUR_API_KEY',
