@@ -180,6 +180,7 @@ async function handleFormSubmit(e) {
             throw new Error('Could not extract channel ID from the provided URL');
         }
         
+        console.log('Using Channel ID:', channelId); // Debug: Log the channel ID
         await processChannel(channelId);
         
     } catch (error) {
@@ -198,24 +199,41 @@ async function extractChannelId(url) {
         const pathname = urlObj.pathname;
         
         let channelId = null;
+        let username = null;
+        
+        console.log('Extracting from URL:', url);
+        console.log('Pathname:', pathname);
         
         // Handle YouTube channel URL formats
         if (hostname.includes('youtube.com')) {
             if (pathname.startsWith('/channel/')) {
                 // Direct channel ID: youtube.com/channel/UC...
                 channelId = pathname.split('/')[2];
-            } else if (pathname.startsWith('/c/') || pathname.startsWith('/@')) {
-                // Custom URL: youtube.com/c/ChannelName or youtube.com/@Username
-                const username = pathname.split('/')[2];
+                console.log('Extracted direct channel ID:', channelId); // Debug
+            } else if (pathname.startsWith('/c/')) {
+                // Custom URL: youtube.com/c/ChannelName
+                username = pathname.split('/')[2];
                 
-                statusMessage.textContent = 'Looking up channel by username...';
+                statusMessage.textContent = 'Looking up channel by custom URL...';
+                console.log('Looking up channel ID for custom URL:', username); // Debug
                 channelId = await YouTubeAPI.getChannelId(username);
+                console.log('Found channel ID for custom URL:', channelId); // Debug
+            } else if (pathname.startsWith('/@')) {
+                // Handle format: youtube.com/@Username
+                username = pathname.substring(2); // Remove leading /@ to get Username
+                
+                statusMessage.textContent = 'Looking up channel by handle...';
+                console.log('Looking up channel ID for handle:', username); // Debug
+                channelId = await YouTubeAPI.getChannelId('@' + username);
+                console.log('Found channel ID for handle:', channelId); // Debug
             } else if (pathname.startsWith('/user/')) {
                 // Legacy username: youtube.com/user/Username
-                const username = pathname.split('/')[2];
+                username = pathname.split('/')[2];
                 
                 statusMessage.textContent = 'Looking up channel by legacy username...';
+                console.log('Looking up channel ID for legacy username:', username); // Debug
                 channelId = await YouTubeAPI.getChannelId(username);
+                console.log('Found channel ID for legacy username:', channelId); // Debug
             }
         }
         
@@ -231,12 +249,18 @@ async function processChannel(channelId) {
     statusMessage.textContent = 'Fetching videos from channel...';
     
     try {
+        console.log('Fetching videos for channel ID:', channelId); // Debug
         const videos = await YouTubeAPI.getChannelVideos(channelId);
         
         if (videos.length === 0) {
             showError('No public videos found for this channel');
             return;
         }
+        
+        // Debug: Log the channel IDs of returned videos
+        console.log('Video count:', videos.length);
+        console.log('Expected channel ID:', channelId);
+        console.log('Sample video channel IDs:', videos.slice(0, 3).map(v => v.channelId));
         
         totalVideos = videos.length;
         updateStats();

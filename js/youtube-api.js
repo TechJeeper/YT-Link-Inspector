@@ -38,6 +38,8 @@ const YouTubeAPI = {
             // Remove @ if present
             const searchTerm = customUrl.startsWith('@') ? customUrl.substring(1) : customUrl;
             
+            console.log('Searching for channel with term:', searchTerm);
+            
             const response = await fetch(
                 `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchTerm}&type=channel&key=${this.apiKey}`
             );
@@ -47,8 +49,14 @@ const YouTubeAPI = {
             }
             
             const data = await response.json();
+            console.log('Channel search results:', data.items ? data.items.length : 0);
             
             if (data.items && data.items.length > 0) {
+                console.log('First channel result:', {
+                    title: data.items[0].snippet.title,
+                    channelId: data.items[0].channelId || data.items[0].id.channelId,
+                    description: data.items[0].snippet.description
+                });
                 return data.items[0].channelId || data.items[0].id.channelId;
             }
             
@@ -80,7 +88,7 @@ const YouTubeAPI = {
             const uploadsPlaylistId = data.items[0].contentDetails.relatedPlaylists.uploads;
             
             // Now get the videos from the uploads playlist
-            return this.getPlaylistVideos(uploadsPlaylistId, maxResults);
+            return this.getPlaylistVideos(uploadsPlaylistId, maxResults, channelId);
         } catch (error) {
             console.error('Error fetching channel videos:', error);
             throw error;
@@ -88,10 +96,13 @@ const YouTubeAPI = {
     },
     
     // Get videos from a playlist
-    async getPlaylistVideos(playlistId, maxResults = 50) {
+    async getPlaylistVideos(playlistId, maxResults = 50, channelId = null) {
         try {
             const videos = [];
             let nextPageToken = '';
+            
+            console.log('Getting playlist videos for playlist:', playlistId);
+            console.log('Filtering for channel ID:', channelId);
             
             // We'll limit to maxResults, but may need multiple API calls to get them
             while (videos.length < maxResults) {
@@ -116,10 +127,22 @@ const YouTubeAPI = {
                     id: item.contentDetails.videoId,
                     title: item.snippet.title,
                     thumbnail: item.snippet.thumbnails.default.url,
-                    url: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`
+                    url: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`,
+                    channelId: item.snippet.channelId, // Add channelId to verify ownership
+                    channelTitle: item.snippet.channelTitle // Add channel title for reference
                 }));
                 
-                videos.push(...pageVideos);
+                console.log('Fetched videos in page:', pageVideos.length);
+                console.log('Video channel IDs in this page:', pageVideos.map(v => v.channelId).slice(0, 3));
+                
+                // Only filter videos if channelId is provided
+                if (channelId) {
+                    const filteredVideos = pageVideos.filter(video => video.channelId === channelId);
+                    console.log('Videos matching channel ID:', filteredVideos.length);
+                    videos.push(...filteredVideos);
+                } else {
+                    videos.push(...pageVideos);
+                }
                 
                 // Check if there are more pages
                 if (!data.nextPageToken) {
@@ -129,8 +152,10 @@ const YouTubeAPI = {
                 nextPageToken = data.nextPageToken;
             }
             
+            console.log('Total videos after filtering:', videos.length);
+            
             // Get video descriptions (requires additional API calls)
-            return this.getVideoDescriptions(videos);
+            return this.getVideoDescriptions(videos, channelId);
         } catch (error) {
             console.error('Error fetching playlist videos:', error);
             throw error;
@@ -138,7 +163,7 @@ const YouTubeAPI = {
     },
     
     // Get video descriptions (requires a separate API call)
-    async getVideoDescriptions(videos) {
+    async getVideoDescriptions(videos, channelId = null) {
         try {
             // Process videos in chunks of 50 (API limitation)
             const results = [];
@@ -163,13 +188,20 @@ const YouTubeAPI = {
                 
                 // Add descriptions to the video objects
                 for (const item of data.items) {
-                    const videoIndex = results.length + chunk.findIndex(v => v.id === item.id);
+                    const videoIndex = chunk.findIndex(v => v.id === item.id);
                     
-                    if (videoIndex >= 0 && videoIndex < videos.length) {
-                        results.push({
-                            ...videos[videoIndex],
-                            description: item.snippet.description
-                        });
+                    if (videoIndex >= 0) {
+                        // Verify this video belongs to the expected channel
+                        if (!channelId || chunk[videoIndex].channelId === item.snippet.channelId) {
+                            results.push({
+                                ...chunk[videoIndex],
+                                description: item.snippet.description
+                            });
+                        } else {
+                            console.log('Skipping video with mismatched channel ID:', item.id);
+                            console.log(' - Expected:', channelId);
+                            console.log(' - Found:', item.snippet.channelId);
+                        }
                     }
                 }
             }
