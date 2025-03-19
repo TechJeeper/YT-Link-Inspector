@@ -222,21 +222,32 @@ header p {
 }
 
 .link-item {
-    border-left: 3px solid var(--dark-gray);
-    padding: 10px 15px;
-    margin-bottom: 10px;
-}
-
-.link-item.broken {
-    border-left-color: var(--error-color);
-}
-
-.link-item.suspicious {
-    border-left-color: var(--warning-color);
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .link-item.valid {
-    border-left-color: var(--success-color);
+    border-left: 4px solid #28a745;
+}
+
+.link-item.broken {
+    border-left: 4px solid #dc3545;
+    background-color: #fff5f5;
+}
+
+.link-item.suspicious {
+    border-left: 4px solid #ffc107;
+    background-color: #fff9e6;
+}
+
+.link-item.unchecked {
+    border-left: 4px solid #6c757d;
+    background-color: #f8f9fa;
 }
 
 .link-url {
@@ -246,26 +257,30 @@ header p {
 }
 
 .link-status {
-    font-size: 0.9rem;
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 12px;
-    margin-top: 5px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 500;
 }
 
 .status-valid {
-    background-color: rgba(76, 175, 80, 0.1);
-    color: var(--success-color);
+    color: #28a745;
+    background-color: #e6f3e6;
 }
 
 .status-broken {
-    background-color: rgba(244, 67, 54, 0.1);
-    color: var(--error-color);
+    color: #dc3545;
+    background-color: #fde8e8;
 }
 
 .status-suspicious {
-    background-color: rgba(255, 193, 7, 0.1);
-    color: var(--warning-color);
+    color: #d97706;
+    background-color: #fef3c7;
+}
+
+.status-unchecked {
+    color: #6c757d;
+    background-color: #e9ecef;
 }
 
 /* Error Section Styles */

@@ -10,6 +10,7 @@ const resultsContainer = document.getElementById('results-container');
 const videosCount = document.getElementById('videos-count');
 const linksCount = document.getElementById('links-count');
 const brokenCount = document.getElementById('broken-count');
+const uncheckedCount = document.getElementById('unchecked-count');
 
 // API Key Elements
 const apiKeyInput = document.getElementById('api-key-input');
@@ -23,6 +24,7 @@ const apiKeyInstructions = document.getElementById('api-key-instructions');
 let totalVideos = 0;
 let totalLinks = 0;
 let totalIssues = 0;
+let totalUnchecked = 0;
 
 // Cookie name for storing API key
 const API_KEY_COOKIE = 'yt_link_inspector_api_key';
@@ -161,6 +163,7 @@ async function handleFormSubmit(e) {
     totalVideos = 0;
     totalLinks = 0;
     totalIssues = 0;
+    totalUnchecked = 0;
     
     // Update stats display
     updateStats();
@@ -309,8 +312,11 @@ async function processVideo(video) {
         const processedLink = await LinkValidator.validateLink(link);
         processedLinks.push(processedLink);
         
-        if (processedLink.status !== 'valid') {
+        if (processedLink.status === 'broken' || processedLink.status === 'suspicious') {
             totalIssues++;
+            updateStats();
+        } else if (processedLink.status === 'unchecked') {
+            totalUnchecked++;
             updateStats();
         }
     }
@@ -328,6 +334,7 @@ function appendVideoResult(video, links) {
     const validLinks = links.filter(link => link.status === 'valid').length;
     const brokenLinks = links.filter(link => link.status === 'broken').length;
     const suspiciousLinks = links.filter(link => link.status === 'suspicious').length;
+    const uncheckedLinks = links.filter(link => link.status === 'unchecked').length;
     const totalIssuesForVideo = brokenLinks + suspiciousLinks;
     
     // Create the video header
@@ -340,7 +347,7 @@ function appendVideoResult(video, links) {
             </div>
             <div class="video-stats">
                 <span class="link-status ${totalIssuesForVideo > 0 ? 'status-broken' : 'status-valid'}">
-                    ${links.length} Links, ${totalIssuesForVideo} Issues
+                    ${links.length} Links, ${totalIssuesForVideo} Issues${uncheckedLinks > 0 ? `, ${uncheckedLinks} Unchecked` : ''}
                 </span>
             </div>
         </div>
@@ -374,6 +381,7 @@ function updateStats() {
     videosCount.textContent = totalVideos;
     linksCount.textContent = totalLinks;
     brokenCount.textContent = totalIssues;
+    uncheckedCount.textContent = totalUnchecked;
 }
 
 // Show error message

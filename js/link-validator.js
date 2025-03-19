@@ -2,13 +2,9 @@
 const LinkValidator = {
     // Known sites that block HEAD/GET requests but are typically valid
     knownValidDomains: [
+        'amazon.com', 'amazon.co.uk', 'amazon.ca', 'amzn.to',
         'walmart.com', 'ebay.com', 'ebay.co.uk',
         'bestbuy.com', 'target.com'
-    ],
-
-    // Amazon domains for product checking
-    amazonDomains: [
-        'amazon.com', 'amazon.co.uk', 'amazon.ca', 'amzn.to'
     ],
 
     // Function to validate multiple links simultaneously
@@ -22,20 +18,9 @@ const LinkValidator = {
         let lastError = null;
         
         try {
-            // First check if this is a known valid domain or Amazon
+            // First check if this is a known valid domain
             const urlObj = new URL(url);
             const domain = urlObj.hostname.toLowerCase();
-            
-            // Check if it's an Amazon domain
-            const isAmazon = this.amazonDomains.some(known => 
-                domain === known || domain.endsWith('.' + known)
-            );
-            
-            if (isAmazon) {
-                return await this.checkAmazonProduct(url, maxRetries);
-            }
-            
-            // Check other known valid domains
             const isKnownDomain = this.knownValidDomains.some(known => 
                 domain === known || domain.endsWith('.' + known)
             );
@@ -43,9 +28,9 @@ const LinkValidator = {
             if (isKnownDomain) {
                 return {
                     url,
-                    status: 'valid',
-                    statusText: 'Valid Link (Known Domain)',
-                    statusCode: 200,
+                    status: 'unchecked',
+                    statusText: 'Known Domain (Not Checked)',
+                    statusCode: 0,
                     attempts: 1
                 };
             }
@@ -178,77 +163,6 @@ const LinkValidator = {
             error: lastError?.message,
             attempts: maxRetries
         };
-    },
-    
-    // Check Amazon product availability
-    async checkAmazonProduct(url, maxRetries = 3) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        
-        try {
-            const response = await fetch(url, {
-                method: 'GET',
-                redirect: 'follow',
-                signal: controller.signal,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                }
-            });
-            
-            clearTimeout(timeout);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            
-            const text = await response.text();
-            
-            // Check for common "product not available" patterns
-            const unavailablePatterns = [
-                'Currently unavailable',
-                'We don\'t know when or if this item will be back in stock',
-                'This page no longer exists',
-                'Looking for something?',
-                'We couldn\'t find that page',
-                'The Web address you entered is not a functioning page on our site'
-            ];
-            
-            const hasUnavailablePattern = unavailablePatterns.some(pattern => 
-                text.includes(pattern)
-            );
-            
-            if (hasUnavailablePattern) {
-                return {
-                    url,
-                    status: 'broken',
-                    statusText: 'Product No Longer Available',
-                    statusCode: 200,
-                    attempts: 1
-                };
-            }
-            
-            return {
-                url,
-                status: 'valid',
-                statusText: 'Product Available',
-                statusCode: 200,
-                attempts: 1
-            };
-            
-        } catch (error) {
-            clearTimeout(timeout);
-            console.error('Error checking Amazon product:', error);
-            
-            // Return a more specific error for Amazon products
-            return {
-                url,
-                status: 'broken',
-                statusText: 'Unable to Check Product Availability',
-                statusCode: error.message.startsWith('HTTP') ? parseInt(error.message.split(' ')[1]) : 0,
-                error: error.message,
-                attempts: 1
-            };
-        }
     },
     
     // Fallback to GET request
