@@ -12,6 +12,7 @@ const GoogleAuth = {
     // Authentication state
     isAuthenticated: false,
     currentUser: null,
+    tokenClient: null,
     
     // DOM elements
     elements: {
@@ -43,38 +44,114 @@ const GoogleAuth = {
         this.elements.authorizeButton.addEventListener('click', () => this.handleAuthClick());
         this.elements.signOutButton.addEventListener('click', () => this.handleSignOutClick());
         
-        // Load the auth2 library and API client library
+        // Load the auth client library
         this.loadAuthClient();
     },
     
     // Load the auth libraries
     loadAuthClient() {
+        // Initialize the tokenClient for Google Identity Services
+        this.initializeGsi();
+        
         // Load the Google API client library
-        gapi.load('client:auth2', () => this.initClient());
+        gapi.load('client', () => this.initClient());
+    },
+    
+    // Initialize Google Identity Services
+    initializeGsi() {
+        this.tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: this.CLIENT_ID,
+            scope: this.SCOPES,
+            callback: (tokenResponse) => {
+                if (tokenResponse && tokenResponse.access_token) {
+                    // Token received, update state
+                    this.isAuthenticated = true;
+                    this.handleTokenReceived(tokenResponse.access_token);
+                }
+            },
+            error_callback: (error) => {
+                console.error('Error getting token:', error);
+                this.updateSigninStatus(false);
+            }
+        });
     },
     
     // Initialize the API client library
     async initClient() {
         try {
             await gapi.client.init({
-                clientId: this.CLIENT_ID,
-                discoveryDocs: this.DISCOVERY_DOCS,
-                scope: this.SCOPES
+                apiKey: '',  // API Key is optional for this use case
+                discoveryDocs: this.DISCOVERY_DOCS
             });
             
-            // Listen for sign-in state changes
-            gapi.auth2.getAuthInstance().isSignedIn.listen((isSignedIn) => {
-                this.updateSigninStatus(isSignedIn);
-            });
-            
-            // Handle the initial sign-in state
-            this.updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+            // Check if we have an existing token in session storage
+            const token = sessionStorage.getItem('yt_auth_token');
+            if (token) {
+                this.handleTokenReceived(token);
+            } else {
+                this.updateSigninStatus(false);
+            }
         } catch (error) {
             console.error('Error initializing the API client library:', error);
             
             // Still allow demo mode to work even if authentication fails
             this.elements.authorizeButton.disabled = true;
             this.elements.authorizeButton.innerText = 'Auth Error - Try Demo';
+        }
+    },
+    
+    // Handle received token
+    async handleTokenReceived(token) {
+        // Set the access token for API requests
+        gapi.client.setToken({ access_token: token });
+        
+        // Store token in session storage
+        sessionStorage.setItem('yt_auth_token', token);
+        
+        // Update UI
+        this.updateSigninStatus(true);
+        
+        // Get user profile info
+        await this.fetchUserInfo(token);
+    },
+    
+    // Fetch user info using the token
+    async fetchUserInfo(token) {
+        try {
+            // Get user info from Google
+            const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch user info');
+            }
+            
+            const userInfo = await response.json();
+            
+            this.currentUser = {
+                id: userInfo.sub,
+                name: userInfo.name,
+                email: userInfo.email,
+                imageUrl: userInfo.picture
+            };
+            
+            // Update the UI
+            this.elements.userName.textContent = this.currentUser.name;
+            this.elements.userImage.src = this.currentUser.imageUrl;
+            this.elements.userInfo.style.display = 'block';
+            
+            // Get the user's YouTube channels
+            await this.getUserChannels();
+            
+            // Set the access token for YouTube API
+            if (window.YouTubeAPI) {
+                YouTubeAPI.setAccessToken(token);
+            }
+        } catch (error) {
+            console.error('Error fetching user info:', error);
         }
     },
     
@@ -86,9 +163,6 @@ const GoogleAuth = {
             // Hide auth section, show input section
             this.elements.authSection.style.display = 'none';
             this.elements.inputSection.style.display = 'block';
-            
-            // Get user info
-            this.handleSignedInUser();
         } else {
             this.isAuthenticated = false;
             
@@ -100,34 +174,9 @@ const GoogleAuth = {
             
             // Reset user info
             this.currentUser = null;
-        }
-    },
-    
-    // Handle the signed-in user
-    async handleSignedInUser() {
-        // Get the user's profile info
-        const googleUser = gapi.auth2.getAuthInstance().currentUser.get();
-        const profile = googleUser.getBasicProfile();
-        
-        this.currentUser = {
-            id: profile.getId(),
-            name: profile.getName(),
-            email: profile.getEmail(),
-            imageUrl: profile.getImageUrl()
-        };
-        
-        // Update the UI
-        this.elements.userName.textContent = this.currentUser.name;
-        this.elements.userImage.src = this.currentUser.imageUrl;
-        this.elements.userInfo.style.display = 'block';
-        
-        // Get the user's YouTube channels
-        await this.getUserChannels();
-        
-        // Set the access token for YouTube API
-        if (window.YouTubeAPI) {
-            const authResponse = googleUser.getAuthResponse();
-            YouTubeAPI.setAccessToken(authResponse.access_token);
+            
+            // Clear session storage
+            sessionStorage.removeItem('yt_auth_token');
         }
     },
     
@@ -184,27 +233,40 @@ const GoogleAuth = {
     
     // Handle authentication with Google
     handleAuthClick() {
-        if (gapi.auth2) {
-            gapi.auth2.getAuthInstance().signIn();
+        if (this.tokenClient) {
+            // Request an access token
+            this.tokenClient.requestAccessToken();
         } else {
-            console.error('Auth client not initialized');
+            console.error('Token client not initialized');
         }
     },
     
     // Handle sign out
     handleSignOutClick() {
-        if (gapi.auth2) {
-            gapi.auth2.getAuthInstance().signOut();
+        // Clear token
+        gapi.client.setToken(null);
+        
+        // Clear session storage
+        sessionStorage.removeItem('yt_auth_token');
+        
+        // Update UI
+        this.updateSigninStatus(false);
+        
+        // Revoke the token
+        if (this.getToken()) {
+            fetch(`https://oauth2.googleapis.com/revoke?token=${this.getToken()}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
+            });
         }
     },
     
     // Get the authentication token
     getToken() {
-        if (this.isAuthenticated && gapi.auth2) {
-            const authInstance = gapi.auth2.getAuthInstance();
-            if (authInstance.isSignedIn.get()) {
-                return authInstance.currentUser.get().getAuthResponse().access_token;
-            }
+        if (this.isAuthenticated) {
+            return sessionStorage.getItem('yt_auth_token');
         }
         return null;
     }
