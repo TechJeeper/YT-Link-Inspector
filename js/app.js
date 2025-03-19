@@ -28,6 +28,7 @@ let totalVideos = 0;
 let totalLinks = 0;
 let totalIssues = 0;
 let totalUnchecked = 0;
+let currentSortMode = 'none'; // Track current sort mode
 
 // Cookie name for storing API key
 const API_KEY_COOKIE = 'yt_link_inspector_api_key';
@@ -57,6 +58,12 @@ function initApp() {
             }
         }
     });
+    
+    // Add click events for summary stats sorting
+    videosCount.parentElement.addEventListener('click', () => sortResults('all'));
+    linksCount.parentElement.addEventListener('click', () => sortResults('links'));
+    brokenCount.parentElement.addEventListener('click', () => sortResults('issues'));
+    uncheckedCount.parentElement.addEventListener('click', () => sortResults('unchecked'));
     
     // Disable submit button if no API key is set
     updateSubmitButtonState();
@@ -298,6 +305,9 @@ async function processChannel(channelId, maxVideos = 500, startDate = null, endD
         // Clear previous results
         resultsContainer.innerHTML = '';
         
+        // Reset sort mode
+        currentSortMode = 'none';
+        
         // Process each video
         for (let i = 0; i < videos.length; i++) {
             const video = videos[i];
@@ -311,6 +321,9 @@ async function processChannel(channelId, maxVideos = 500, startDate = null, endD
         // Show results
         statusMessage.textContent = 'Analysis complete!';
         resultsSection.style.display = 'block';
+        
+        // Initialize the sorting UI
+        sortResults('none');
         
     } catch (error) {
         showError(`Error processing channel: ${error.message}`);
@@ -407,6 +420,108 @@ function updateStats() {
     linksCount.textContent = totalLinks;
     brokenCount.textContent = totalIssues;
     uncheckedCount.textContent = totalUnchecked;
+}
+
+// Sort results based on clicked summary stat
+function sortResults(sortMode) {
+    // If results section is not visible, don't do anything
+    if (resultsSection.style.display === 'none') return;
+    
+    // Toggle sort mode if same stat is clicked
+    if (currentSortMode === sortMode) {
+        currentSortMode = 'none';
+    } else {
+        currentSortMode = sortMode;
+    }
+    
+    // Update the visual state of stat containers
+    const statContainers = [
+        videosCount.parentElement,
+        linksCount.parentElement, 
+        brokenCount.parentElement, 
+        uncheckedCount.parentElement
+    ];
+    
+    statContainers.forEach(container => {
+        container.classList.remove('active-sort');
+        container.style.cursor = 'pointer'; // Ensure all stats have pointer cursor
+    });
+    
+    // Add active class to current sort stat if not in 'none' mode
+    if (currentSortMode !== 'none') {
+        let activeContainer;
+        switch (currentSortMode) {
+            case 'all':
+                activeContainer = videosCount.parentElement;
+                break;
+            case 'links':
+                activeContainer = linksCount.parentElement;
+                break;
+            case 'issues':
+                activeContainer = brokenCount.parentElement;
+                break;
+            case 'unchecked':
+                activeContainer = uncheckedCount.parentElement;
+                break;
+        }
+        if (activeContainer) {
+            activeContainer.classList.add('active-sort');
+        }
+    }
+    
+    // Get all video results
+    const videoResults = Array.from(resultsContainer.querySelectorAll('.video-result'));
+    
+    // Store old order to minimize DOM changes if sort hasn't changed
+    const oldOrder = videoResults.map(el => el);
+    
+    // Sort based on selected mode
+    if (currentSortMode === 'none') {
+        // Reset to original order (by video order)
+        videoResults.sort((a, b) => {
+            return oldOrder.indexOf(a) - oldOrder.indexOf(b);
+        });
+    } else {
+        videoResults.sort((a, b) => {
+            const statsA = extractStatsFromVideoResult(a);
+            const statsB = extractStatsFromVideoResult(b);
+            
+            // Sort in descending order (higher values first)
+            switch (currentSortMode) {
+                case 'all':
+                    return 0; // No sorting, keep original order
+                case 'links':
+                    return statsB.links - statsA.links;
+                case 'issues':
+                    return statsB.issues - statsA.issues;
+                case 'unchecked':
+                    return statsB.unchecked - statsA.unchecked;
+                default:
+                    return 0;
+            }
+        });
+    }
+    
+    // Apply the new order
+    videoResults.forEach(video => {
+        resultsContainer.appendChild(video);
+    });
+}
+
+// Helper function to extract stats from a video result element
+function extractStatsFromVideoResult(videoResultElement) {
+    const statsText = videoResultElement.querySelector('.video-stats .link-status').textContent;
+    
+    // Parse stats from the text
+    const linksMatch = statsText.match(/(\d+) Links/);
+    const issuesMatch = statsText.match(/(\d+) Issues/);
+    const uncheckedMatch = statsText.match(/(\d+) Unchecked/);
+    
+    return {
+        links: linksMatch ? parseInt(linksMatch[1]) : 0,
+        issues: issuesMatch ? parseInt(issuesMatch[1]) : 0,
+        unchecked: uncheckedMatch ? parseInt(uncheckedMatch[1]) : 0
+    };
 }
 
 // Show error message
