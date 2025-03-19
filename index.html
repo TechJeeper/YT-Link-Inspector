@@ -7,8 +7,6 @@
     <link rel="icon" href="favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://apis.google.com/js/api.js"></script>
-    <script src="https://accounts.google.com/gsi/client"></script>
 </head>
 <body>
     <div class="container">
@@ -18,43 +16,51 @@
         </header>
 
         <main>
-            <div class="auth-section" id="auth-section">
-                <div class="auth-card">
-                    <h2>Get Started</h2>
-                    <p>Sign in with your Google account to access your YouTube data</p>
-                    <div class="auth-options">
-                        <button id="authorize-button" class="google-auth-btn">
-                            <i class="fab fa-google"></i> Sign in with Google
-                        </button>
-                    </div>
-                    <p class="auth-note">
-                        <i class="fas fa-info-circle"></i> Your data stays private. Authorization is only used to access your YouTube videos.
-                    </p>
+            <div class="api-key-section">
+                <h2><i class="fas fa-key"></i> YouTube API Key Setup</h2>
+                <p>To use this tool, you need a YouTube Data API key from Google.</p>
+                <div class="api-key-input-group">
+                    <input type="text" id="api-key-input" placeholder="Enter your YouTube API Key" autocomplete="off">
+                    <button id="save-api-key-btn">
+                        <i class="fas fa-save"></i> Apply
+                    </button>
+                </div>
+                <div class="api-key-options">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="remember-api-key">
+                        <span class="checkmark"></span>
+                        Remember my API key on this device
+                    </label>
+                </div>
+                <div class="api-key-status" id="api-key-status">
+                    <span class="status-label not-set">API Key not set</span>
+                    <a href="#" id="api-key-help-link" class="help-link">How to get an API key?</a>
+                </div>
+                
+                <div id="api-key-instructions" class="api-key-instructions" style="display: none;">
+                    <h3>How to get a YouTube API Key:</h3>
+                    <ol>
+                        <li>Go to the <a href="https://console.developers.google.com/" target="_blank">Google Cloud Console</a></li>
+                        <li>Create a new project or select an existing one</li>
+                        <li>From the navigation menu, select "APIs & Services" > "Library"</li>
+                        <li>Search for "YouTube Data API v3" and click on it</li>
+                        <li>Click "Enable" to activate this API for your project</li>
+                        <li>Go to "APIs & Services" > "Credentials"</li>
+                        <li>Click "Create Credentials" > "API key"</li>
+                        <li>Copy your new API key and paste it in the field above</li>
+                        <li>Optional: Restrict your API key to only the YouTube Data API</li>
+                    </ol>
+                    <p class="note"><i class="fas fa-info-circle"></i> Note: The API key is only stored in your browser (if you choose to remember it) and is never sent to our servers.</p>
                 </div>
             </div>
 
-            <div class="input-section" id="input-section" style="display: none;">
-                <div class="user-info" id="user-info" style="display: none;">
-                    <div class="user-profile">
-                        <img id="user-image" src="" alt="Profile" class="user-image">
-                        <div class="user-details">
-                            <span id="user-name">User Name</span>
-                            <button id="sign-out-btn" class="sign-out-btn">
-                                <i class="fas fa-sign-out-alt"></i> Sign Out
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            <div class="input-section">
                 <form id="channel-form">
                     <div class="input-group">
                         <input type="text" id="channel-input" placeholder="Enter YouTube Channel URL" required>
                         <button type="submit" id="submit-btn">
                             <i class="fas fa-search"></i> Inspect
                         </button>
-                    </div>
-                    <div class="channel-options" id="your-channels" style="display: none;">
-                        <p>Or select one of your channels:</p>
-                        <div id="user-channels" class="user-channels-list"></div>
                     </div>
                 </form>
             </div>
@@ -106,7 +112,6 @@
     <!-- Load utility modules first -->
     <script src="js/link-validator.js"></script>
     <script src="js/youtube-api.js"></script>
-    <script src="js/auth.js"></script>
     
     <!-- Load main app script -->
     <script src="js/app.js"></script>

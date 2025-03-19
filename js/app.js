@@ -11,21 +11,32 @@ const videosCount = document.getElementById('videos-count');
 const linksCount = document.getElementById('links-count');
 const brokenCount = document.getElementById('broken-count');
 
+// API Key Elements
+const apiKeyInput = document.getElementById('api-key-input');
+const saveApiKeyBtn = document.getElementById('save-api-key-btn');
+const rememberApiKey = document.getElementById('remember-api-key');
+const apiKeyStatus = document.getElementById('api-key-status');
+const apiKeyHelpLink = document.getElementById('api-key-help-link');
+const apiKeyInstructions = document.getElementById('api-key-instructions');
+
 // Statistics
 let totalVideos = 0;
 let totalLinks = 0;
 let totalIssues = 0;
 
+// Cookie name for storing API key
+const API_KEY_COOKIE = 'yt_link_inspector_api_key';
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', initApp);
 channelForm.addEventListener('submit', handleFormSubmit);
+saveApiKeyBtn.addEventListener('click', saveApiKey);
+apiKeyHelpLink.addEventListener('click', toggleApiKeyInstructions);
 
 // Initialize application
 function initApp() {
-    // Initialize YouTube API
-    if (window.YouTubeAPI) {
-        YouTubeAPI.init();
-    }
+    // Load API key from cookie if available
+    loadSavedApiKey();
     
     // Add event delegation for video result expansion
     resultsContainer.addEventListener('click', (e) => {
@@ -41,14 +52,106 @@ function initApp() {
             }
         }
     });
+    
+    // Disable submit button if no API key is set
+    updateSubmitButtonState();
+}
+
+// Load API key from cookie
+function loadSavedApiKey() {
+    const savedApiKey = getCookie(API_KEY_COOKIE);
+    
+    if (savedApiKey) {
+        apiKeyInput.value = savedApiKey;
+        rememberApiKey.checked = true;
+        updateApiKeyStatus(true);
+        
+        // Initialize YouTube API with the saved key
+        if (window.YouTubeAPI) {
+            YouTubeAPI.init(savedApiKey);
+        }
+    }
+}
+
+// Save API key
+function saveApiKey() {
+    const apiKey = apiKeyInput.value.trim();
+    
+    if (!apiKey) {
+        showError('Please enter a valid YouTube API Key');
+        return;
+    }
+    
+    // Initialize YouTube API with the new key
+    if (window.YouTubeAPI) {
+        YouTubeAPI.init(apiKey);
+    }
+    
+    // Save to cookie if remember is checked
+    if (rememberApiKey.checked) {
+        setCookie(API_KEY_COOKIE, apiKey, 30); // Save for 30 days
+    } else {
+        deleteCookie(API_KEY_COOKIE);
+    }
+    
+    updateApiKeyStatus(true);
+    updateSubmitButtonState();
+    
+    // Hide any previous errors
+    errorSection.style.display = 'none';
+}
+
+// Toggle API key instructions visibility
+function toggleApiKeyInstructions(e) {
+    e.preventDefault();
+    
+    if (apiKeyInstructions.style.display === 'none') {
+        apiKeyInstructions.style.display = 'block';
+    } else {
+        apiKeyInstructions.style.display = 'none';
+    }
+}
+
+// Update API key status indicator
+function updateApiKeyStatus(isSet) {
+    const statusLabel = apiKeyStatus.querySelector('.status-label');
+    
+    if (isSet) {
+        statusLabel.textContent = 'API Key set';
+        statusLabel.classList.remove('not-set');
+        statusLabel.classList.add('set');
+    } else {
+        statusLabel.textContent = 'API Key not set';
+        statusLabel.classList.remove('set');
+        statusLabel.classList.add('not-set');
+    }
+}
+
+// Update submit button state based on API key
+function updateSubmitButtonState() {
+    const submitBtn = document.getElementById('submit-btn');
+    const apiKey = apiKeyInput.value.trim();
+    
+    submitBtn.disabled = !apiKey;
+    
+    if (!apiKey) {
+        submitBtn.classList.add('disabled');
+    } else {
+        submitBtn.classList.remove('disabled');
+    }
 }
 
 // Handle form submission
 async function handleFormSubmit(e) {
     e.preventDefault();
     
-    const channelUrl = channelInput.value.trim();
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+        showError('Please enter a YouTube API Key before inspecting a channel');
+        return;
+    }
     
+    const channelUrl = channelInput.value.trim();
     if (!channelUrl) {
         showError('Please enter a valid YouTube channel URL');
         return;
@@ -105,33 +208,21 @@ async function extractChannelId(url) {
                 // Custom URL: youtube.com/c/ChannelName or youtube.com/@Username
                 const username = pathname.split('/')[2];
                 
-                // Check if authenticated
-                if (window.GoogleAuth && !GoogleAuth.isAuthenticated) {
-                    throw new Error('Authentication required. Please sign in with Google to access YouTube data.');
-                } else if (window.YouTubeAPI) {
-                    // Use YouTube API with OAuth
-                    statusMessage.textContent = 'Looking up channel by username...';
-                    channelId = await YouTubeAPI.getChannelId(username);
-                }
+                statusMessage.textContent = 'Looking up channel by username...';
+                channelId = await YouTubeAPI.getChannelId(username);
             } else if (pathname.startsWith('/user/')) {
                 // Legacy username: youtube.com/user/Username
                 const username = pathname.split('/')[2];
                 
-                // Check if authenticated
-                if (window.GoogleAuth && !GoogleAuth.isAuthenticated) {
-                    throw new Error('Authentication required. Please sign in with Google to access YouTube data.');
-                } else if (window.YouTubeAPI) {
-                    // Use YouTube API with OAuth
-                    statusMessage.textContent = 'Looking up channel by legacy username...';
-                    channelId = await YouTubeAPI.getChannelId(username);
-                }
+                statusMessage.textContent = 'Looking up channel by legacy username...';
+                channelId = await YouTubeAPI.getChannelId(username);
             }
         }
         
         return channelId;
     } catch (error) {
         console.error('Error extracting channel ID:', error);
-        throw error;
+        throw new Error('Invalid YouTube channel URL');
     }
 }
 
@@ -140,60 +231,42 @@ async function processChannel(channelId) {
     statusMessage.textContent = 'Fetching videos from channel...';
     
     try {
-        // Fetch videos using YouTube API
-        const videos = await fetchChannelVideos(channelId);
+        const videos = await YouTubeAPI.getChannelVideos(channelId);
         
-        if (!videos || videos.length === 0) {
-            throw new Error('No videos found in this channel');
+        if (videos.length === 0) {
+            showError('No public videos found for this channel');
+            return;
         }
         
-        // Update the total videos count
         totalVideos = videos.length;
         updateStats();
         
-        // Process each video to check for links
-        statusMessage.textContent = `Found ${videos.length} videos. Checking for links...`;
+        statusMessage.textContent = `Processing ${videos.length} videos...`;
         
         // Clear previous results
         resultsContainer.innerHTML = '';
         
-        // Process videos and check links
+        // Process each video
         for (let i = 0; i < videos.length; i++) {
             const video = videos[i];
-            statusMessage.textContent = `Checking video ${i + 1} of ${videos.length}: ${video.title}`;
+            const videoIndex = i + 1;
+            
+            statusMessage.textContent = `Processing video ${videoIndex}/${videos.length}...`;
+            
             await processVideo(video);
         }
         
-        // Show the results section
-        loadingSection.style.display = 'none';
+        // Show results
+        statusMessage.textContent = 'Analysis complete!';
         resultsSection.style.display = 'block';
         
-        // Final stats update
-        updateStats();
     } catch (error) {
-        console.error('Error processing channel:', error);
-        throw error;
-    }
-}
-
-// Fetch videos from a channel using the YouTube API
-async function fetchChannelVideos(channelId) {
-    try {
-        // Use YouTube API to get channel videos
-        if (window.YouTubeAPI) {
-            return await YouTubeAPI.getChannelVideos(channelId);
-        }
-        
-        throw new Error('Authentication required. Please sign in with Google to access YouTube data.');
-    } catch (error) {
-        console.error('Error fetching channel videos:', error);
-        throw error;
+        showError(`Error processing channel: ${error.message}`);
     }
 }
 
 // Process a single video
 async function processVideo(video) {
-    // Use the LinkValidator to extract and check URLs
     const links = LinkValidator.extractUrls(video.description);
     
     if (links.length === 0) {
@@ -283,4 +356,26 @@ function showError(message) {
     errorMessage.textContent = message;
     errorSection.style.display = 'block';
     loadingSection.style.display = 'none';
+}
+
+// Cookie utilities
+function setCookie(name, value, days) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Strict`;
+}
+
+function getCookie(name) {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
+
+function deleteCookie(name) {
+    document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Strict`;
 } 

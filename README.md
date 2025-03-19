@@ -5,7 +5,6 @@ A web-based tool that helps YouTube content creators check their channel videos 
 ## Features
 
 - Simple and modern user interface
-- Google OAuth authentication to access your YouTube data
 - Automatically fetches videos from a YouTube channel
 - Checks all links found in video descriptions
 - Identifies broken links, parked domains, and suspicious URLs
@@ -14,54 +13,43 @@ A web-based tool that helps YouTube content creators check their channel videos 
 
 ## How to Use
 
-1. Open the website in your browser
-2. Choose to sign in with your Google account or use demo mode
-3. If you sign in, you can select from your YouTube channels directly
-4. Otherwise, enter a YouTube channel URL (formats supported: `/channel/ID`, `/c/ChannelName`, `/@username`, `/user/Username`)
-5. Click "Inspect" and wait for the results
-6. Review the detailed results that show which videos have broken or suspicious links
-7. Fix the problematic links in your video descriptions on YouTube
+1. Obtain a YouTube Data API key from the [Google Developer Console](https://console.developers.google.com/)
+2. Enter your API key in the application (with option to save it in your browser)
+3. Enter your YouTube channel URL (formats supported: `/channel/ID`, `/c/ChannelName`, `/@username`, `/user/Username`)
+4. Click "Inspect" and wait for the results
+5. Review the detailed results that show which videos have broken or suspicious links
+6. Fix the problematic links in your video descriptions on YouTube
 
-## Authentication
+## Getting a YouTube API Key
 
-The app uses Google OAuth 2.0 for authentication, which provides several benefits:
-
-- No need to manually create and paste in an API key
-- Secure access to your own YouTube data
-- Ability to select from your own channels
-- Higher API usage quotas than with public API keys
-
-Your credentials are never stored on any server. The app runs 100% in your browser.
+1. Go to the [Google Cloud Console](https://console.developers.google.com/)
+2. Create a new project or select an existing one
+3. From the navigation menu, select "APIs & Services" > "Library"
+4. Search for "YouTube Data API v3" and click on it
+5. Click "Enable" to activate this API for your project
+6. Go to "APIs & Services" > "Credentials"
+7. Click "Create Credentials" > "API key"
+8. Copy your new API key and use it in the YT Link Inspector
+9. For security, restrict your API key to only the YouTube Data API
 
 ## Technical Details
 
 This application is built using pure HTML, CSS, and JavaScript. It can be hosted on GitHub Pages.
 
-### YouTube API Access Methods
+### YouTube API
 
-The application can access the YouTube API in three ways:
+The application uses the YouTube Data API to fetch channel and video information. Your API key is required for all operations. For privacy:
 
-1. **OAuth 2.0 Authentication** (recommended): Sign in with your Google account for full access to your channels
-2. **API Key** (for developers): If you have an API key, you can still use that by setting it in the code
-3. **Demo Mode**: Uses simulated data for demonstration purposes
-
-### Setting Up OAuth Credentials
-
-To configure the application with your own OAuth credentials:
-
-1. Go to the [Google Developer Console](https://console.developers.google.com/)
-2. Create a new project
-3. Enable the YouTube Data API v3
-4. Create OAuth 2.0 credentials
-5. Set the authorized JavaScript origins to your domain (e.g., `https://yourdomain.github.io`)
-6. Replace `YOUR_GOOGLE_CLIENT_ID` in the `js/auth.js` file with your OAuth Client ID
+- Your API key is never sent to our servers
+- You can opt to store your API key in a browser cookie for convenience
+- The cookie is set with SameSite=Strict for security
 
 ### Link Validation
 
 Link validation is performed by sending requests to check if links are valid. Since this app runs on the client side, it uses:
 
 1. Pattern matching for known problematic domains
-2. Simulated link checking for demo purposes
+2. Simulated link checking
 
 In a production environment, you would typically use a proxy API to check links due to CORS restrictions.
 
@@ -71,7 +59,7 @@ To run the application locally:
 
 1. Clone this repository
 2. Open the `index.html` file in your web browser
-3. For full functionality, set up OAuth credentials as described above
+3. Enter your YouTube API key when prompted
 
 ## Limitations
 
