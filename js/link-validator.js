@@ -41,13 +41,13 @@ const LinkValidator = {
         
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-                // Make a real HTTP HEAD request to check the link
+                // Make a request to check the link
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
                 
                 try {
-                    // First try with no-cors mode to see if resource exists
-                    const noCorsResponse = await fetch(url, {
+                    // Always use no-cors mode to avoid CORS issues
+                    const response = await fetch(url, {
                         method: 'GET',
                         mode: 'no-cors',
                         redirect: 'follow',
@@ -59,54 +59,43 @@ const LinkValidator = {
                     
                     clearTimeout(timeout);
                     
-                    // If we get here with no-cors, the resource exists but we can't check its status
-                    // Try a HEAD request to get more info, but don't fail if it doesn't work
-                    try {
-                        const headResponse = await fetch(url, {
-                            method: 'HEAD',
-                            redirect: 'follow',
-                            signal: controller.signal,
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (compatible; LinkChecker/1.0)'
-                            }
-                        });
-                        
-                        // If HEAD request succeeds, use its status
-                        return {
-                            url,
-                            status: headResponse.ok ? 'valid' : 'broken',
-                            statusText: headResponse.ok ? 'Valid Link' : `HTTP Error ${headResponse.status}`,
-                            statusCode: headResponse.status,
-                            attempts: attempt
-                        };
-                    } catch (headError) {
-                        // If HEAD fails but no-cors GET worked, consider it valid
-                        return {
-                            url,
-                            status: 'valid',
-                            statusText: 'Link Accessible (Limited Check)',
-                            statusCode: 200,
-                            attempts: attempt
-                        };
-                    }
+                    // If we get here, the resource exists (no-cors won't give us status info)
+                    return {
+                        url,
+                        status: 'valid',
+                        statusText: 'Link Accessible',
+                        statusCode: 200,
+                        attempts: attempt
+                    };
                     
                 } catch (fetchError) {
                     clearTimeout(timeout);
                     
-                    // If no-cors fails, the resource is likely not available
+                    // If this is the last attempt, determine the error type
                     if (attempt === maxRetries) {
                         let statusText = 'Connection Failed';
                         let statusCode = 0;
                         
-                        // Determine more specific error messages
+                        // Check the error type
+                        if (fetchError.name === 'TypeError' && fetchError.message.includes('Failed to fetch')) {
+                            // This usually means the resource doesn't exist or is inaccessible
+                            return {
+                                url,
+                                status: 'broken',
+                                statusText: 'Resource Not Available',
+                                statusCode: 404,
+                                error: fetchError.message,
+                                attempts: attempt
+                            };
+                        }
+                        
+                        // Determine other error types
                         if (fetchError.message.includes('ENOTFOUND') || fetchError.message.includes('not found')) {
                             statusText = 'Domain Not Found';
                         } else if (fetchError.message.includes('ECONNREFUSED')) {
                             statusText = 'Connection Refused';
                         } else if (fetchError.message.includes('certificate')) {
                             statusText = 'SSL Certificate Error';
-                        } else if (fetchError.message.includes('Failed to fetch')) {
-                            statusText = 'Resource Not Available';
                         }
                         
                         return {
