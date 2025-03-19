@@ -13,7 +13,7 @@ const brokenCount = document.getElementById('broken-count');
 
 // YouTube API key (you should use your own API key here)
 // For GitHub hosting, you'd normally handle this more securely
-const API_KEY = 'YOUR_YOUTUBE_API_KEY';
+const API_KEY = 'AIzaSyCzt6WAIBrlXJ_yCJqwqbCOelriHGBCArc';
 
 // Statistics
 let totalVideos = 0;
