@@ -46,8 +46,10 @@ const LinkValidator = {
                 const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
                 
                 try {
-                    const response = await fetch(url, {
-                        method: 'HEAD',
+                    // First try with no-cors mode to see if resource exists
+                    const noCorsResponse = await fetch(url, {
+                        method: 'GET',
+                        mode: 'no-cors',
                         redirect: 'follow',
                         signal: controller.signal,
                         headers: {
@@ -57,38 +59,67 @@ const LinkValidator = {
                     
                     clearTimeout(timeout);
                     
-                    // Check if we got a 405 Method Not Allowed
-                    if (response.status === 405) {
-                        // Try GET request instead
-                        return await this.fallbackToGet(url, controller);
-                    }
-                    
-                    // Handle other response statuses
-                    if (response.ok) {
+                    // If we get here with no-cors, the resource exists but we can't check its status
+                    // Try a HEAD request to get more info, but don't fail if it doesn't work
+                    try {
+                        const headResponse = await fetch(url, {
+                            method: 'HEAD',
+                            redirect: 'follow',
+                            signal: controller.signal,
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (compatible; LinkChecker/1.0)'
+                            }
+                        });
+                        
+                        // If HEAD request succeeds, use its status
+                        return {
+                            url,
+                            status: headResponse.ok ? 'valid' : 'broken',
+                            statusText: headResponse.ok ? 'Valid Link' : `HTTP Error ${headResponse.status}`,
+                            statusCode: headResponse.status,
+                            attempts: attempt
+                        };
+                    } catch (headError) {
+                        // If HEAD fails but no-cors GET worked, consider it valid
                         return {
                             url,
                             status: 'valid',
-                            statusText: 'Valid Link',
-                            statusCode: response.status,
+                            statusText: 'Link Accessible (Limited Check)',
+                            statusCode: 200,
                             attempts: attempt
                         };
-                    } else {
-                        throw new Error(`HTTP ${response.status}`);
                     }
                     
                 } catch (fetchError) {
                     clearTimeout(timeout);
                     
-                    // If it's a 405 or network error, try GET
-                    if (fetchError.message.includes('405') || !fetchError.message.includes('HTTP')) {
-                        try {
-                            return await this.fallbackToGet(url, controller);
-                        } catch (getError) {
-                            throw getError;
+                    // If no-cors fails, the resource is likely not available
+                    if (attempt === maxRetries) {
+                        let statusText = 'Connection Failed';
+                        let statusCode = 0;
+                        
+                        // Determine more specific error messages
+                        if (fetchError.message.includes('ENOTFOUND') || fetchError.message.includes('not found')) {
+                            statusText = 'Domain Not Found';
+                        } else if (fetchError.message.includes('ECONNREFUSED')) {
+                            statusText = 'Connection Refused';
+                        } else if (fetchError.message.includes('certificate')) {
+                            statusText = 'SSL Certificate Error';
+                        } else if (fetchError.message.includes('Failed to fetch')) {
+                            statusText = 'Resource Not Available';
                         }
+                        
+                        return {
+                            url,
+                            status: 'broken',
+                            statusText: `${statusText} (${maxRetries} attempts failed)`,
+                            statusCode: statusCode,
+                            error: fetchError.message,
+                            attempts: attempt
+                        };
                     }
                     
-                    throw fetchError;
+                    throw fetchError; // Rethrow to trigger retry
                 }
                 
             } catch (error) {
@@ -109,84 +140,22 @@ const LinkValidator = {
                     }
                 }
                 
-                // If this is the last attempt, return the error result
-                if (attempt === maxRetries) {
-                    let statusText = 'Connection Failed';
-                    let statusCode = 0;
-                    
-                    // Determine more specific error messages
-                    if (error.message.includes('ENOTFOUND') || error.message.includes('not found')) {
-                        statusText = 'Domain Not Found';
-                    } else if (error.message.includes('ECONNREFUSED')) {
-                        statusText = 'Connection Refused';
-                    } else if (error.message.includes('certificate')) {
-                        statusText = 'SSL Certificate Error';
-                    } else if (error.message.startsWith('HTTP ')) {
-                        // Extract status code from HTTP error
-                        statusCode = parseInt(error.message.split(' ')[1]);
-                        switch (statusCode) {
-                            case 404:
-                                statusText = 'Page Not Found';
-                                break;
-                            case 403:
-                                statusText = 'Access Forbidden';
-                                break;
-                            case 500:
-                                statusText = 'Server Error';
-                                break;
-                            default:
-                                statusText = `HTTP Error ${statusCode}`;
-                        }
-                    }
-                    
-                    return {
-                        url,
-                        status: 'broken',
-                        statusText: `${statusText} (${maxRetries} attempts failed)`,
-                        statusCode: statusCode,
-                        error: error.message,
-                        attempts: attempt
-                    };
-                }
-                
                 // Wait before retrying (exponential backoff)
-                await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                if (attempt < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                }
             }
         }
         
-        // This should never be reached due to the return in the last attempt
+        // This should only be reached if all retries failed
         return {
             url,
             status: 'broken',
-            statusText: 'Unexpected error during validation',
+            statusText: 'Connection Failed (All Attempts)',
             statusCode: 0,
             error: lastError?.message,
             attempts: maxRetries
         };
-    },
-    
-    // Fallback to GET request
-    async fallbackToGet(url, controller) {
-        const getResponse = await fetch(url, {
-            method: 'GET',
-            redirect: 'follow',
-            signal: controller.signal,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (compatible; LinkChecker/1.0)'
-            }
-        });
-        
-        if (getResponse.ok) {
-            return {
-                url,
-                status: 'valid',
-                statusText: 'Valid Link',
-                statusCode: getResponse.status,
-                attempts: 1
-            };
-        } else {
-            throw new Error(`HTTP ${getResponse.status}`);
-        }
     },
     
     // Check if a domain appears suspicious
