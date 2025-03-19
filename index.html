@@ -91,31 +91,25 @@
 
             <div class="results-section" id="results-section" style="display: none;">
                 <div class="stats-container">
-                    <div class="stat">
+                    <div class="stat clickable active-sort" title="Show all videos">
                         <span id="videos-count">0</span>
                         <p>Videos Found</p>
                     </div>
-                    <div class="stat">
+                    <div class="stat clickable" title="Sort by most links">
                         <span id="links-count">0</span>
                         <p>Links Found</p>
                     </div>
-                    <div class="stat">
+                    <div class="stat clickable" title="Show only videos with issues">
                         <span id="broken-count">0</span>
                         <p>Issues Found</p>
                     </div>
-                    <div class="stat">
+                    <div class="stat clickable" title="Show only videos with unchecked links">
                         <span id="unchecked-count">0</span>
                         <p>Unchecked</p>
                     </div>
                 </div>
                 
                 <div id="results-container" class="results-container"></div>
-                
-                <div class="pagination-controls">
-                    <button id="prev-page" class="btn btn-secondary" disabled>Previous Page</button>
-                    <span id="page-info">Page <span id="current-page">1</span></span>
-                    <button id="next-page" class="btn btn-secondary" disabled>Next Page</button>
-                </div>
             </div>
 
             <div class="error-section" id="error-section" style="display: none;">

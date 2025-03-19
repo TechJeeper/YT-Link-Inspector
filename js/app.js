@@ -44,6 +44,7 @@ const API_KEY_COOKIE = 'yt_link_inspector_api_key';
 // Global state for results pagination
 let allVideoResults = [];
 let videosPerPage = 10;
+let currentSortType = null;
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', initApp);
@@ -63,6 +64,12 @@ nextPageBtn.addEventListener('click', () => {
         displayCurrentPage();
     }
 });
+
+// Add event listeners for stat sorting
+videosCount.parentElement.addEventListener('click', () => sortResults('all'));
+linksCount.parentElement.addEventListener('click', () => sortResults('links'));
+brokenCount.parentElement.addEventListener('click', () => sortResults('issues'));
+uncheckedCount.parentElement.addEventListener('click', () => sortResults('unchecked'));
 
 // Initialize application
 function initApp() {
@@ -196,6 +203,7 @@ async function handleFormSubmit(e) {
     // Reset state
     currentPage = 1;
     allVideoResults = [];
+    currentSortType = null;
     totalVideos = 0;
     totalLinks = 0;
     totalIssues = 0;
@@ -226,13 +234,16 @@ async function handleFormSubmit(e) {
         
         await fetchAndProcessAllVideos(channelId, options);
         
-        // Display first page of results
-        displayCurrentPage();
+        // Display results
+        displayResults();
         
         // Show results
         statusMessage.textContent = 'Analysis complete!';
         resultsSection.style.display = 'block';
         loadingSection.style.display = 'none';
+        
+        // Add active class to stats for sorting indication
+        updateStatHighlights('all');
         
     } catch (error) {
         showError(error.message);
@@ -297,30 +308,85 @@ async function processVideo(video) {
     return { video, links: processedLinks };
 }
 
-// Display current page of results
-function displayCurrentPage() {
-    const startIndex = (currentPage - 1) * videosPerPage;
-    const endIndex = startIndex + videosPerPage;
-    const pageResults = allVideoResults.slice(startIndex, endIndex);
+// Sort results based on clicked stat
+function sortResults(sortType) {
+    currentSortType = sortType;
+    displayResults();
+    updateStatHighlights(sortType);
+}
+
+// Update stat highlights to show active sort
+function updateStatHighlights(activeType) {
+    const statElements = [
+        videosCount.parentElement,
+        linksCount.parentElement,
+        brokenCount.parentElement,
+        uncheckedCount.parentElement
+    ];
     
+    statElements.forEach(el => el.classList.remove('active-sort'));
+    
+    switch (activeType) {
+        case 'all':
+            videosCount.parentElement.classList.add('active-sort');
+            break;
+        case 'links':
+            linksCount.parentElement.classList.add('active-sort');
+            break;
+        case 'issues':
+            brokenCount.parentElement.classList.add('active-sort');
+            break;
+        case 'unchecked':
+            uncheckedCount.parentElement.classList.add('active-sort');
+            break;
+    }
+}
+
+// Display results based on current sort
+function displayResults() {
     // Clear previous results
     resultsContainer.innerHTML = '';
     
-    // Add each video result to the container
-    for (const result of pageResults) {
-        appendVideoResult(result.video, result.links);
+    // Make a copy of results for sorting
+    let sortedResults = [...allVideoResults];
+    
+    // Sort based on current sort type
+    if (currentSortType === 'links') {
+        // Sort by number of links (descending)
+        sortedResults.sort((a, b) => b.links.length - a.links.length);
+    } else if (currentSortType === 'issues') {
+        // Sort by number of issues (descending)
+        sortedResults.sort((a, b) => {
+            const issuesA = a.links.filter(link => 
+                link.status === 'broken' || link.status === 'suspicious').length;
+            const issuesB = b.links.filter(link => 
+                link.status === 'broken' || link.status === 'suspicious').length;
+            return issuesB - issuesA;
+        });
+        
+        // Filter to only show videos with issues
+        sortedResults = sortedResults.filter(result => {
+            return result.links.some(link => 
+                link.status === 'broken' || link.status === 'suspicious');
+        });
+    } else if (currentSortType === 'unchecked') {
+        // Sort by number of unchecked links (descending)
+        sortedResults.sort((a, b) => {
+            const uncheckedA = a.links.filter(link => link.status === 'unchecked').length;
+            const uncheckedB = b.links.filter(link => link.status === 'unchecked').length;
+            return uncheckedB - uncheckedA;
+        });
+        
+        // Filter to only show videos with unchecked links
+        sortedResults = sortedResults.filter(result => {
+            return result.links.some(link => link.status === 'unchecked');
+        });
     }
     
-    // Update pagination controls
-    updatePaginationControls();
-}
-
-// Update pagination controls
-function updatePaginationControls() {
-    const totalPages = Math.ceil(allVideoResults.length / videosPerPage);
-    prevPageBtn.disabled = currentPage === 1;
-    nextPageBtn.disabled = currentPage >= totalPages;
-    currentPageSpan.textContent = currentPage;
+    // Add each video result to the container
+    for (const result of sortedResults) {
+        appendVideoResult(result.video, result.links);
+    }
 }
 
 // Append a video result to the results container
